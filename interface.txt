@@ -889,17 +889,28 @@ params: wait, bool
 return: dict["string", "string"]
 
 command: 0xC6
-call:   device_get_rowcount_printbuf
+call:   set_daily_report_damp_buffer
 params: password, int32
 return: dict["string", "string"]
 
 command: 0xC7
+call:   set_print_daily_report_buffer
+params: password, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0xC8
+call:   device_get_rowcount_printbuf
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xC9
 call:   device_get_string_printbuf
 params: password, int32
 params: string num, int32
 return: dict["string", "string"]
 
-command: 0xC8
+command: 0xCA
 call:   device_set_clear_printbuf
 params: password, int32
 return: dict["string", "string"]
@@ -911,6 +922,45 @@ return: dict["string", "string"]
 
 command: 0xD1
 call:   device_get_fr_ibm_status
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xE2
+call:   device_set_open_nonfiscal_document
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xE3
+call:   device_set_close_nonfiscal_document
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xE4
+call:   device_set_print_props
+params: password, int32
+params: props num, int32
+params: props values, string # max 200 bytes
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0xE5
+call:   device_get_state_bill_acceptor
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xE6
+call:   device_get_registers_bill_acceptor
+params: password, int32
+params: reg num, int32
+return: dict["string", "string"]
+
+command: 0xE7
+call:   device_get_report_bill_acceptor
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xE8
+call:   device_get_operational_report_ni
 params: password, int32
 return: dict["string", "string"]
 

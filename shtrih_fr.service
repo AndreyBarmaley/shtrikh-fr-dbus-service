@@ -246,11 +246,20 @@ dbus_method("device_set_print_barcode", ["int32", "string", "bool"], [["dict", "
 dbus_method("device_set_load_ext_graphics", ["int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
 dbus_method("device_set_print_ext_graphics", ["int32", "int32", "int32", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_set_print_line", ["int32", "int32", ["array", "byte"], "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_daily_report_damp_buffer", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_daily_report_buffer", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_rowcount_printbuf", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_string_printbuf", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_clear_printbuf", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_fr_ibm_status_long", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_fr_ibm_status", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_open_nonfiscal_document", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_close_nonfiscal_document", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_props", ["int32", "int32", "string", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_get_state_bill_acceptor", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_registers_bill_acceptor", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_report_bill_acceptor", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_operational_report_ni", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_flap_control", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_check_getout", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_password_cto", ["int32", "int32"], [["dict", "string", "string"]]);
@@ -1375,6 +1384,28 @@ sub device_set_print_line
 	$self->{DEVICE}->set_print_line(@_) : { ERROR_CODE => -1 };
 }
 
+sub device_set_daily_report_damp_buffer
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_daily_report_damp_buffer(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_daily_report_buffer
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_daily_report_buffer(@_) : { ERROR_CODE => -1 };
+}
+
 sub device_get_rowcount_printbuf
 {
     my $self = shift;
@@ -1428,6 +1459,83 @@ sub device_get_fr_ibm_status
 
     return $self->device_is_online() ?
 	$self->{DEVICE}->get_fr_ibm_status(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_open_nonfiscal_document
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_open_nonfiscal_document(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_close_nonfiscal_document
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_close_nonfiscal_document(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_props
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_props(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_state_bill_acceptor
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_state_bill_acceptor(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_registers_bill_acceptor
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_registers_bill_acceptor(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_report_bill_acceptor
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_report_bill_acceptor(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_operational_report_ni
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_operational_report_ni(@_) : { ERROR_CODE => -1 };
 }
 
 sub device_set_flap_control

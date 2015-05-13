@@ -19,7 +19,7 @@ use strict;
 use constant
 {
     MY_DRIVER_VERSION => 20150513,
-    FR_PROTOCOL_VERSION	=> 1.11
+    FR_PROTOCOL_VERSION	=> 1.12
 };
 
 use constant
@@ -122,11 +122,20 @@ use constant
     SET_LOAD_EXT_GRAPHICS	=> 0xC3,
     SET_PRINT_EXT_GRAPHICS	=> 0xC4,
     SET_PRINT_LINE		=> 0xC5,
+    SET_DAILY_REPORT_DAMP_BUFFER	=> 0xC6,
+    SET_PRINT_DAILY_REPORT_BUFFER	=> 0xC7,
     GET_ROWCOUNT_PRINTBUF	=> 0xC8,
     GET_STRING_PRINTBUF		=> 0xC9,
     SET_CLEAR_PRINTBUF		=> 0xCA,
     GET_FR_IBM_STATUS_LONG	=> 0xD0,
     GET_FR_IBM_STATUS		=> 0xD1,
+    SET_OPEN_NONFISCAL_DOCUMENT	=> 0xE2,
+    SET_CLOSE_NONFISCAL_DOCUMENT=> 0xE3,
+    SET_PRINT_PROPS		=> 0xE4,
+    GET_STATE_BILL_ACCEPTOR	=> 0xE5,
+    GET_REGISTERS_BILL_ACCEPTOR	=> 0xE6,
+    GET_REPORT_BILL_ACCEPTOR	=> 0xE7,
+    GET_OPERATIONAL_REPORT_NI	=> 0xE8,
     SET_FLAP_CONTROL		=> 0xF0,
     SET_CHECK_GETOUT		=> 0xF1,
     SET_PASSWORD_CTO		=> 0xF3,
@@ -274,7 +283,7 @@ sub printing_wait
 sub get_dump
 {
     my ($self, $pass, $subsystem, undef) = @_;
-    my $buf = pack_stx(6, GET_DUMP, "LC", $pass, $subsystem);
+    my $buf = pack_stx(6, GET_DUMP, "VC", $pass, $subsystem);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -300,7 +309,7 @@ sub get_dump
 sub get_data
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_DATA, "L", $pass);
+    my $buf = pack_stx(5, GET_DATA, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -329,7 +338,7 @@ sub get_data
 sub set_break
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_BREAK, "L", $pass);
+    my $buf = pack_stx(5, SET_BREAK, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -352,7 +361,7 @@ sub set_fiscalization_long_rnm
     # rnm is 7 byte: "00000000000000"
     # inn is 6 byte: "000000000000"
     my ($self, $pass_old, $pass_new, $rnm, $inn, undef) = @_;
-    my $buf = pack_stx(22, SET_FISCALIZATION_LONG_RNM, "LL(H2)7(H2)6", $pass_old, $pass_new, unpack("(A2)7", $rnm), unpack("(A2)6", $inn));
+    my $buf = pack_stx(22, SET_FISCALIZATION_LONG_RNM, "VV(H2)7(H2)6", $pass_old, $pass_new, unpack("(A2)7", $rnm), unpack("(A2)6", $inn));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -383,7 +392,7 @@ sub set_long_serial_number
 {
     # serial is 7 byte: "00000000000000"
     my ($self, $pass, $serial, undef) = @_;
-    my $buf = pack_stx(12, SET_LONG_SERIAL_NUMBER, "L(H2)7", $pass, unpack("(A2)7", $serial));
+    my $buf = pack_stx(12, SET_LONG_SERIAL_NUMBER, "V(H2)7", $pass, unpack("(A2)7", $serial));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -404,7 +413,7 @@ sub set_long_serial_number
 sub get_long_serial_number_rnm
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_LONG_SERIAL_NUMBER_RNM, "L", $pass);
+    my $buf = pack_stx(5, GET_LONG_SERIAL_NUMBER_RNM, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -432,7 +441,7 @@ sub get_long_serial_number_rnm
 sub get_short_status
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_SHORT_STATUS, "L", $pass);
+    my $buf = pack_stx(5, GET_SHORT_STATUS, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -472,7 +481,7 @@ sub get_short_status
 sub get_device_status
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_DEVICE_STATUS, "L", $pass);
+    my $buf = pack_stx(5, GET_DEVICE_STATUS, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -530,7 +539,7 @@ sub set_print_bold_string
 {
     my ($self, $pass, $flag, $str, $wait, undef) = @_;
     Encode::from_to($str, "utf8", "cp1251");
-    my $buf = pack_stx(26, SET_PRINT_BOLD_STRING, "LCA20", $pass, $flag, $str);
+    my $buf = pack_stx(26, SET_PRINT_BOLD_STRING, "VCA20", $pass, $flag, $str);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -558,7 +567,7 @@ sub set_print_bold_string
 sub set_beep
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_BEEP, "L", $pass);
+    my $buf = pack_stx(5, SET_BEEP, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -606,7 +615,7 @@ sub set_communication_params
 	$timeout = 100;
     }
 
-    my $buf = pack_stx(6, SET_RS232_PARAM, "LCCC", $pass, $portnum, $bod_index, $timeout);
+    my $buf = pack_stx(6, SET_RS232_PARAM, "VCCC", $pass, $portnum, $bod_index, $timeout);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -632,7 +641,7 @@ sub set_communication_params
 sub get_communication_params
 {
     my ($self, $pass, $portnum, undef) = @_;
-    my $buf = pack_stx(6, GET_RS232_PARAM, "LC", $pass, $portnum);
+    my $buf = pack_stx(6, GET_RS232_PARAM, "VC", $pass, $portnum);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -695,7 +704,7 @@ sub set_print_string
 {
     my ($self, $pass, $flag, $str, $wait, undef) = @_;
     Encode::from_to($str, "utf8", "cp1251");
-    my $buf = pack_stx(46, SET_PRINT_STRING, "LCA40", $pass, $flag, $str);
+    my $buf = pack_stx(46, SET_PRINT_STRING, "VCA40", $pass, $flag, $str);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -724,7 +733,7 @@ sub set_print_header
 {
     my ($self, $pass, $docname, $docnum, $wait, undef) = @_;
     Encode::from_to($docname, "utf8", "cp1251");
-    my $buf = pack_stx(37, SET_PRINT_HEADER, "LA30v", $pass, $docname, $docnum);
+    my $buf = pack_stx(37, SET_PRINT_HEADER, "VA30v", $pass, $docname, $docnum);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -754,7 +763,7 @@ sub set_print_header
 sub set_test_run
 {
     my ($self, $pass, $period, undef) = @_;
-    my $buf = pack_stx(6, SET_TEST_RUN, "LC", $pass, $period);
+    my $buf = pack_stx(6, SET_TEST_RUN, "VC", $pass, $period);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -780,7 +789,7 @@ sub set_test_run
 sub get_cache_register
 {
     my ($self, $pass, $regnum, undef) = @_;
-    my $buf = pack_stx(6, GET_CASHE_REGISTER, "LC", $pass, $regnum);
+    my $buf = pack_stx(6, GET_CASHE_REGISTER, "VC", $pass, $regnum);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -807,7 +816,7 @@ sub get_cache_register
 sub get_operational_register
 {
     my ($self, $pass, $regnum, undef) = @_;
-    my $buf = pack_stx(6, GET_OPERATIONAL_REGISTER, "LC", $pass, $regnum);
+    my $buf = pack_stx(6, GET_OPERATIONAL_REGISTER, "VC", $pass, $regnum);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -835,7 +844,7 @@ sub set_license
 {
     # license is 5 byte: "0000000000"
     my ($self, $pass, $license, undef) = @_;
-    my $buf = pack_stx(10, SET_LICENSE, "L(H2)5", $pass, unpack("(A2)5", $license));
+    my $buf = pack_stx(10, SET_LICENSE, "V(H2)5", $pass, unpack("(A2)5", $license));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -855,7 +864,7 @@ sub set_license
 sub get_license
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_LICENSE, "L", $pass);
+    my $buf = pack_stx(5, GET_LICENSE, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -881,7 +890,7 @@ sub get_license
 sub set_write_table
 {
     my ($self, $pass, $table, $col, $field, $data, undef) = @_;
-    my $buf = pack_stx(9 + length($data), SET_WRITE_TABLE, "LCvCa*", $pass, $table, $col, $field, $data);
+    my $buf = pack_stx(9 + length($data), SET_WRITE_TABLE, "VCvCa*", $pass, $table, $col, $field, $data);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -902,7 +911,7 @@ sub set_write_table
 sub get_read_table
 {
     my ($self, $pass, $table, $col, $field, undef) = @_;
-    my $buf = pack_stx(9, GET_READ_TABLE, "LCvC", $pass, $table, $col, $field);
+    my $buf = pack_stx(9, GET_READ_TABLE, "VCvC", $pass, $table, $col, $field);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -928,7 +937,7 @@ sub get_read_table
 sub set_decimal_point
 {
     my ($self, $pass, $pos, undef) = @_;
-    my $buf = pack_stx(6, SET_DECIMAL_POINT, "LC", $pass, $pos);
+    my $buf = pack_stx(6, SET_DECIMAL_POINT, "VC", $pass, $pos);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -949,7 +958,7 @@ sub set_decimal_point
 sub set_current_time
 {
     my ($self, $pass, $hour, $min, $sec, undef) = @_;
-    my $buf = pack_stx(8, SET_CURRENT_TIME, "LCCC", $pass, $hour, $min, $sec);
+    my $buf = pack_stx(8, SET_CURRENT_TIME, "VCCC", $pass, $hour, $min, $sec);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -970,7 +979,7 @@ sub set_current_time
 sub set_current_date
 {
     my ($self, $pass, $year, $mon, $day, undef) = @_;
-    my $buf = pack_stx(8, SET_CURRENT_DATE, "LCCC", $pass, $day, $mon, $year);
+    my $buf = pack_stx(8, SET_CURRENT_DATE, "VCCC", $pass, $day, $mon, $year);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -991,7 +1000,7 @@ sub set_current_date
 sub set_date_confirm
 {
     my ($self, $pass, $year, $mon, $day, undef) = @_;
-    my $buf = pack_stx(8, SET_DATE_CONFIRM, "LCCC", $pass, $day, $mon, $year);
+    my $buf = pack_stx(8, SET_DATE_CONFIRM, "VCCC", $pass, $day, $mon, $year);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1012,7 +1021,7 @@ sub set_date_confirm
 sub set_init_tables
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_INIT_TABLES, "L", $pass);
+    my $buf = pack_stx(5, SET_INIT_TABLES, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1033,7 +1042,7 @@ sub set_init_tables
 sub set_cut_check
 {
     my ($self, $pass, $type, undef) = @_;
-    my $buf = pack_stx(6, SET_CUT_CHECK, "LC", $pass, $type);
+    my $buf = pack_stx(6, SET_CUT_CHECK, "VC", $pass, $type);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1054,7 +1063,7 @@ sub set_cut_check
 sub get_font_params
 {
     my ($self, $pass, $fontnum, undef) = @_;
-    my $buf = pack_stx(6, GET_FONT_PARAMS, "LC", $pass, $fontnum);
+    my $buf = pack_stx(6, GET_FONT_PARAMS, "VC", $pass, $fontnum);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1083,7 +1092,7 @@ sub get_font_params
 sub set_total_damping
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_TOTAL_DAMPING, "L", $pass);
+    my $buf = pack_stx(5, SET_TOTAL_DAMPING, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1104,7 +1113,7 @@ sub set_total_damping
 sub set_open_money_box
 {
     my ($self, $pass, $boxnum, undef) = @_;
-    my $buf = pack_stx(6, SET_OPEN_MONEY_BOX, "LC", $pass, $boxnum);
+    my $buf = pack_stx(6, SET_OPEN_MONEY_BOX, "VC", $pass, $boxnum);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1130,7 +1139,7 @@ sub set_open_money_box
 sub set_scroll
 {
     my ($self, $pass, $flags, $rows, undef) = @_;
-    my $buf = pack_stx(7, SET_SCROLL, "LCC", $pass, $flags, $rows);
+    my $buf = pack_stx(7, SET_SCROLL, "VCC", $pass, $flags, $rows);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1156,7 +1165,7 @@ sub set_scroll
 sub set_getout_backfilling_document
 {
     my ($self, $pass, $direct, undef) = @_;
-    my $buf = pack_stx(6, SET_GETOUT_BACKFILLING_DOC, "LC", $pass, $direct);
+    my $buf = pack_stx(6, SET_GETOUT_BACKFILLING_DOC, "VC", $pass, $direct);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1182,7 +1191,7 @@ sub set_getout_backfilling_document
 sub set_break_test_run
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_BREAK_TEST_RUN, "L", $pass);
+    my $buf = pack_stx(5, SET_BREAK_TEST_RUN, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1208,7 +1217,7 @@ sub set_break_test_run
 sub get_registers_values
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_REGISTERS_VALUES, "L", $pass);
+    my $buf = pack_stx(5, GET_REGISTERS_VALUES, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1234,7 +1243,7 @@ sub get_registers_values
 sub get_structure_table
 {
     my ($self, $pass, $tabnum, undef) = @_;
-    my $buf = pack_stx(6, GET_STRUCTURE_TABLE, "LC", $pass, $tabnum);
+    my $buf = pack_stx(6, GET_STRUCTURE_TABLE, "VC", $pass, $tabnum);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1262,7 +1271,7 @@ sub get_structure_table
 sub get_structure_field
 {
     my ($self, $pass, $tabnum, $fieldnum, undef) = @_;
-    my $buf = pack_stx(7, GET_STRUCTURE_FIELD, "LCC", $pass, $tabnum, $fieldnum);
+    my $buf = pack_stx(7, GET_STRUCTURE_FIELD, "VCC", $pass, $tabnum, $fieldnum);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1294,7 +1303,7 @@ sub set_print_font_string
 {
     my ($self, $pass, $flag, $fontnum, $str, $wait, undef) = @_;
     Encode::from_to($str, "utf8", "cp1251");
-    my $buf = pack_stx(47, SET_PRINT_FONT_STRING, "LCCA40", $pass, $flag, $fontnum, $str);
+    my $buf = pack_stx(47, SET_PRINT_FONT_STRING, "VCCA40", $pass, $flag, $fontnum, $str);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1322,7 +1331,7 @@ sub set_print_font_string
 sub get_daily_report
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, GET_DAILY_REPORT, "L", $pass);
+    my $buf = pack_stx(5, GET_DAILY_REPORT, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1350,7 +1359,7 @@ sub get_daily_report
 sub get_daily_report_with_damp
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, GET_DAILY_REPORT_DAMP, "L", $pass);
+    my $buf = pack_stx(5, GET_DAILY_REPORT_DAMP, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1378,7 +1387,7 @@ sub get_daily_report_with_damp
 sub get_sections_report
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, GET_SECTIONS_REPORT, "L", $pass);
+    my $buf = pack_stx(5, GET_SECTIONS_REPORT, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1406,7 +1415,7 @@ sub get_sections_report
 sub get_taxes_report
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, GET_TAXES_REPORT, "L", $pass);
+    my $buf = pack_stx(5, GET_TAXES_REPORT, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1435,7 +1444,7 @@ sub set_adding_amount
 {
     # amount is big int string
     my ($self, $pass, $amount, undef) = @_;
-    my $buf = pack_stx(10, SET_ADDING_AMOUNT, "La5", $pass, get_le_bigint5_from_string($amount));
+    my $buf = pack_stx(10, SET_ADDING_AMOUNT, "Va5", $pass, get_le_bigint5_from_string($amount));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1463,7 +1472,7 @@ sub get_payment_amount
 {
     # amount is big int string
     my ($self, $pass, $amount, undef) = @_;
-    my $buf = pack_stx(10, GET_PAYMENT_AMOUNT, "La5", $pass, get_le_bigint5_from_string($amount));
+    my $buf = pack_stx(10, GET_PAYMENT_AMOUNT, "Va5", $pass, get_le_bigint5_from_string($amount));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1490,7 +1499,7 @@ sub get_payment_amount
 sub set_print_cliche
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, SET_PRINT_CLICHE, "L", $pass);
+    my $buf = pack_stx(5, SET_PRINT_CLICHE, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1518,7 +1527,7 @@ sub set_print_cliche
 sub set_document_end
 {
     my ($self, $pass, $param, undef) = @_;
-    my $buf = pack_stx(6, SET_DOCUMENT_END, "LC", $pass, $param);
+    my $buf = pack_stx(6, SET_DOCUMENT_END, "VC", $pass, $param);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1544,7 +1553,7 @@ sub set_document_end
 sub set_print_ad_text
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_PRINT_AD_TEXT, "L", $pass);
+    my $buf = pack_stx(5, SET_PRINT_AD_TEXT, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1571,7 +1580,7 @@ sub set_serial_number
 {
     # serial is 4 byte: "00000000"
     my ($self, $pass, $serial, undef) = @_;
-    my $buf = pack_stx(9, SET_SERIAL_NUMBER, "L(H2)4", $pass, unpack("(A2)4", $serial));
+    my $buf = pack_stx(9, SET_SERIAL_NUMBER, "V(H2)4", $pass, unpack("(A2)4", $serial));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1613,7 +1622,7 @@ sub set_fp_init
 sub get_fp_sum_records
 {
     my ($self, $pass, $type, undef) = @_;
-    my $buf = pack_stx(6, GET_FP_SUM_RECORDS, "LC", $pass, $type);
+    my $buf = pack_stx(6, GET_FP_SUM_RECORDS, "VC", $pass, $type);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1645,7 +1654,7 @@ sub get_fp_sum_records
 sub get_fp_last_record_date
 {
     my ($self, $pass, $type, undef) = @_;
-    my $buf = pack_stx(5, GET_FP_LAST_RECORD_DATE, "L", $pass);
+    my $buf = pack_stx(5, GET_FP_LAST_RECORD_DATE, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1675,7 +1684,7 @@ sub get_fp_last_record_date
 sub get_query_date_range_tour
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_QUERY_DATE_RANGE_TOUR, "L", $pass);
+    my $buf = pack_stx(5, GET_QUERY_DATE_RANGE_TOUR, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1709,7 +1718,7 @@ sub set_fiscalization
     # rnm is 5 byte: "0000000000"
     # inn is 6 byte: "000000000000"
     my ($self, $pass_old, $pass_new, $rnm, $inn, undef) = @_;
-    my $buf = pack_stx(20, SET_FISCALIZATION, "LL(H2)5(H2)6", $pass_old, $pass_new, unpack("(A2)5", $rnm), unpack("(A2)6", $inn));
+    my $buf = pack_stx(20, SET_FISCALIZATION, "VV(H2)5(H2)6", $pass_old, $pass_new, unpack("(A2)5", $rnm), unpack("(A2)6", $inn));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1740,7 +1749,7 @@ sub set_fiscalization
 sub get_fiscal_report_by_date
 {
     my ($self, $pass, $type, $year1, $month1, $day1, $year2, $month2, $day2, undef) = @_;
-    my $buf = pack_stx(12, GET_FISCAL_REPORT_BY_DATE, "LCCCCCCC", $pass, $type, $day1, $month1, substr($year1, -2, 2), $day2, $month2, substr($year2, -2, 2));
+    my $buf = pack_stx(12, GET_FISCAL_REPORT_BY_DATE, "VCCCCCCC", $pass, $type, $day1, $month1, substr($year1, -2, 2), $day2, $month2, substr($year2, -2, 2));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1772,7 +1781,7 @@ sub get_fiscal_report_by_date
 sub get_fiscal_report_by_tour
 {
     my ($self, $pass, $type, $firstnum, $lastnum, undef) = @_;
-    my $buf = pack_stx(10, GET_FISCAL_REPORT_BY_TOUR, "LCvv", $pass, $type, $firstnum, $lastnum);
+    my $buf = pack_stx(10, GET_FISCAL_REPORT_BY_TOUR, "VCvv", $pass, $type, $firstnum, $lastnum);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1804,7 +1813,7 @@ sub get_fiscal_report_by_tour
 sub set_break_full_report
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_BREAK_FULL_REPORT, "L", $pass);
+    my $buf = pack_stx(5, SET_BREAK_FULL_REPORT, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1825,7 +1834,7 @@ sub set_break_full_report
 sub get_fiscalization_params
 {
     my ($self, $pass, $fiscalnum, undef) = @_;
-    my $buf = pack_stx(6, GET_FISCALIZATION_PARAMS, "LC", $pass, $fiscalnum);
+    my $buf = pack_stx(6, GET_FISCALIZATION_PARAMS, "VC", $pass, $fiscalnum);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1858,7 +1867,7 @@ sub set_open_fiscal_underdoc
     my ($self, $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth,
 	$font_number_cliche, $font_number_header, $font_number_eklz, $font_number_kpk, $string_number_cliche, $string_number_header, $string_number_eklz, $string_number_repeat,
 	$offset_cliche, $offset_header, $offset_eklz, $offset_kpk, $offset_repeat, undef) = @_;
-    my $buf = pack_stx(26, SET_OPEN_FISCAL_UNDERDOC, "LCCCCCCCCCCCCCCCCCCCCC", $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth,
+    my $buf = pack_stx(26, SET_OPEN_FISCAL_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCC", $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth,
 	$font_number_cliche, $font_number_header, $font_number_eklz, $font_number_kpk, $string_number_cliche, $string_number_header, $string_number_eklz, $string_number_repeat,
 	$offset_cliche, $offset_header, $offset_eklz, $offset_kpk, $offset_repeat);
     my $res = ();
@@ -1888,7 +1897,7 @@ sub set_open_fiscal_underdoc
 sub set_open_standard_fiscal_underdoc
 {
     my ($self, $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth, undef) = @_;
-    my $buf = pack_stx(13, SET_OPEN_STD_FISCAL_UNDERDOC, "LCCCCCCCC", $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth);
+    my $buf = pack_stx(13, SET_OPEN_STD_FISCAL_UNDERDOC, "VCCCCCCCC", $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1924,7 +1933,7 @@ sub set_forming_operation_underdoc
 	$offset_field_str, $offset_field_mul, $offset_field_sum, $offset_field_dep,
 	$number_string_pd, $amount, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(82, SET_FORMING_OPERATION_UNDERDOC, "LCCCCCCCCCCCCCCCCCCCCCCa5a5CCCCCA40", $pass,
+    my $buf = pack_stx(82, SET_FORMING_OPERATION_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCCCa5a5CCCCCA40", $pass,
 	$number_format, $string_count, $string_number, $string_number_mul, $string_number_sum, $string_number_dep,
 	$font_number_str, $font_number_count, $font_number_mul, $font_number_price, $font_number_sum, $font_number_dep,
 	$count_sym_field_str, $count_sym_field_count, $count_sym_field_price, $count_sym_field_sum, $count_sym_field_dep,
@@ -1962,7 +1971,7 @@ sub set_forming_standard_operation_underdoc
     my ($self, $pass, 
 	$number_string_pd, $amount, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(61, SET_FORMING_STD_OPERATION_UNDERDOC, "LCa5a5CCCCCA40", $pass,
+    my $buf = pack_stx(61, SET_FORMING_STD_OPERATION_UNDERDOC, "VCa5a5CCCCCA40", $pass,
 	$number_string_pd, get_le_bigint5_from_string($amount), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
 
     my $res = ();
@@ -1996,7 +2005,7 @@ sub set_forming_discount_underdoc
 	$count_sym_field_str, $count_sym_field_sum, $offset_field_str, $offset_field_name, $offset_field_sum, $operation_type, $number_string_pd,
 	$amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(68, SET_FORMING_DISCOUNT_UNDERDOC, "LCCCCCCCCCCCCCCa5CCCCA40", $pass,
+    my $buf = pack_stx(68, SET_FORMING_DISCOUNT_UNDERDOC, "VCCCCCCCCCCCCCCa5CCCCA40", $pass,
 	$string_count, $string_number_str, $string_number_name, $string_number_sum, $font_number_str, $font_number_name, $font_number_sum,
 	$count_sym_field_str, $count_sym_field_sum, $offset_field_str, $offset_field_name, $offset_field_sum, $operation_type, $number_string_pd,
 	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
@@ -2031,7 +2040,7 @@ sub set_forming_std_discount_underdoc
     my ($self, $pass, $operation_type, $string_number_pd,
 	$amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(56, SET_FORMING_STD_DISCOUNT_UNDERDOC, "LCCa5CCCCA40", $pass,
+    my $buf = pack_stx(56, SET_FORMING_STD_DISCOUNT_UNDERDOC, "VCCa5CCCCA40", $pass,
 	$operation_type, $string_number_pd, get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
 
     my $res = ();
@@ -2090,7 +2099,7 @@ sub set_forming_close_check_underdoc
 	$offset_field_total, $offset_field_sum_accrual_discount, $offset_field_discount_xx, $offset_field_sum_discount,
 	$number_string_pd, $amount, $amount_type2, $amount_type3, $amount_type4, $discout_on_check, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(182, SET_FORMING_CLOSE_CHECK_UNDERDOC, "LCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCa5a5a5a5vCCCCA40", $pass,
+    my $buf = pack_stx(182, SET_FORMING_CLOSE_CHECK_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCa5a5a5a5vCCCCA40", $pass,
 	$string_count, $string_number_amount, $string_number_str, $string_number_cash,
 	$string_number_payment_type2, $string_number_payment_type3, $string_number_payment_type4, $string_number_short_change,
 	$string_number_return_tax_a, $string_number_return_tax_b, $string_number_return_tax_v, $string_number_return_tax_g, 
@@ -2152,7 +2161,7 @@ sub set_forming_std_close_check_underdoc
     my ($self, $pass, $number_string_pd, $amount, $amount_type2, $amount_type3, $amount_type4,
 	$discout_on_check, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(72, SET_FORMING_STD_CLOSE_CHECK_UNDERDOC, "LCa5a5a5a5vCCCCA40", $pass, $number_string_pd,
+    my $buf = pack_stx(72, SET_FORMING_STD_CLOSE_CHECK_UNDERDOC, "VCa5a5a5a5vCCCCA40", $pass, $number_string_pd,
 	get_le_bigint5_from_string($amount), get_le_bigint5_from_string($amount_type2), get_le_bigint5_from_string($amount_type3), get_le_bigint5_from_string($amount_type4),
 	get_binary_discout_check($discout_on_check), $tax1, $tax2, $tax3, $tax4, $text);
 
@@ -2183,7 +2192,7 @@ sub set_forming_std_close_check_underdoc
 sub set_configuration_underdoc
 {
     my ($self, $pass, $width_underdoc, $length_underdoc, $print_direction, $array_ref, undef) = @_;
-    my $buf = pack_stx(209, SET_CONFIGURATION_UNDERDOC, "LvvCa199", $pass, $width_underdoc, $length_underdoc, $print_direction, @{$array_ref});
+    my $buf = pack_stx(209, SET_CONFIGURATION_UNDERDOC, "VvvCa199", $pass, $width_underdoc, $length_underdoc, $print_direction, @{$array_ref});
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2210,7 +2219,7 @@ sub set_configuration_underdoc
 sub set_std_configuration_underdoc
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_STD_CONFIGURATION_UNDERDOC, "L", $pass);
+    my $buf = pack_stx(5, SET_STD_CONFIGURATION_UNDERDOC, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2237,7 +2246,7 @@ sub set_std_configuration_underdoc
 sub set_fill_buffer_underdoc
 {
     my ($self, $pass, $string_number, $data, undef) = @_;
-    my $buf = pack_stx(6 + length($data), SET_FILL_BUFFER_UNDERDOC, "LCa*", $pass, $string_number, $data);
+    my $buf = pack_stx(6 + length($data), SET_FILL_BUFFER_UNDERDOC, "VCa*", $pass, $string_number, $data);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2264,7 +2273,7 @@ sub set_fill_buffer_underdoc
 sub set_clear_string_underdoc
 {
     my ($self, $pass, $string_number, undef) = @_;
-    my $buf = pack_stx(6, SET_CLEAR_STRING_UNDERDOC, "LC", $pass, $string_number);
+    my $buf = pack_stx(6, SET_CLEAR_STRING_UNDERDOC, "VC", $pass, $string_number);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2291,7 +2300,7 @@ sub set_clear_string_underdoc
 sub set_clear_buffer_underdoc
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_CLEAR_BUFFER_UNDERDOC, "L", $pass);
+    my $buf = pack_stx(5, SET_CLEAR_BUFFER_UNDERDOC, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2318,7 +2327,7 @@ sub set_clear_buffer_underdoc
 sub set_print_underdoc
 {
     my ($self, $pass, $clear, $type, $wait, undef) = @_;
-    my $buf = pack_stx(7, SET_PRINT_UNDERDOC, "LCC", $pass, $clear, $type);
+    my $buf = pack_stx(7, SET_PRINT_UNDERDOC, "VCC", $pass, $clear, $type);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2347,7 +2356,7 @@ sub set_print_underdoc
 sub get_general_configuration_underdoc
 {
     my ($self, $pass, $width, $length, $direction, $spacing, $wait, undef) = @_;
-    my $buf = pack_stx(7, GET_GENERAL_CONFIGURATION_UNDERDOC, "LvvCC", $pass, $width, $length, $direction, $spacing);
+    my $buf = pack_stx(7, GET_GENERAL_CONFIGURATION_UNDERDOC, "VvvCC", $pass, $width, $length, $direction, $spacing);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2377,7 +2386,7 @@ sub set_sell
 {
     # quality, price is big int string
     my ($self, $pass, $quality, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-    my $buf = pack_stx(60, SET_SELL, "La5a5CCCCCa40", $pass,
+    my $buf = pack_stx(60, SET_SELL, "Va5a5CCCCCa40", $pass,
 	get_le_bigint5_from_string($quality), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
     my $res = ();
 
@@ -2406,7 +2415,7 @@ sub set_buy
 {
     # quality, price is big int string
     my ($self, $pass, $quality, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-    my $buf = pack_stx(60, SET_BUY, "La5a5CCCCCa40", $pass,
+    my $buf = pack_stx(60, SET_BUY, "Va5a5CCCCCa40", $pass,
 	get_le_bigint5_from_string($quality), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
     my $res = ();
 
@@ -2435,7 +2444,7 @@ sub set_returns_sale
 {
     # quality, price is big int string
     my ($self, $pass, $quality, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-    my $buf = pack_stx(60, SET_RETURNS_SALE, "La5a5CCCCCa40", $pass,
+    my $buf = pack_stx(60, SET_RETURNS_SALE, "Va5a5CCCCCa40", $pass,
 	get_le_bigint5_from_string($quality), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
     my $res = ();
 
@@ -2464,7 +2473,7 @@ sub set_returns_purchases
 {
     # quality, price is big int string
     my ($self, $pass, $quality, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-    my $buf = pack_stx(60, SET_RETURNS_PURCHASES, "La5a5CCCCCa40", $pass,
+    my $buf = pack_stx(60, SET_RETURNS_PURCHASES, "Va5a5CCCCCa40", $pass,
 	get_le_bigint5_from_string($quality), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
     my $res = ();
 
@@ -2493,7 +2502,7 @@ sub set_reversal
 {
     # quality, price is big int string
     my ($self, $pass, $quality, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-    my $buf = pack_stx(60, SET_REVERSAL, "La5a5CCCCCa40", $pass,
+    my $buf = pack_stx(60, SET_REVERSAL, "Va5a5CCCCCa40", $pass,
 	get_le_bigint5_from_string($quality), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
     my $res = ();
 
@@ -2522,7 +2531,7 @@ sub set_check_close
 {
     # cash_sum, sum_type2, sum_type3, sum_type4 is big int string
     my ($self, $pass, $cash_sum, $sum_type2, $sum_type3, $sum_type4, $discount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-    my $buf = pack_stx(71, SET_CHECK_CLOSE, "La5a5a5a5vCCCCa40", $pass,
+    my $buf = pack_stx(71, SET_CHECK_CLOSE, "Va5a5a5a5vCCCCa40", $pass,
 	get_le_bigint5_from_string($cash_sum), get_le_bigint5_from_string($sum_type2), get_le_bigint5_from_string($sum_type3), get_le_bigint5_from_string($sum_type4),
 	get_binary_discout_check($discount), $tax1, $tax2, $tax3, $tax4, $text);
     my $res = ();
@@ -2553,7 +2562,7 @@ sub set_discount
 {
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-    my $buf = pack_stx(54, SET_DISCOUT, "La5CCCCa40", $pass,
+    my $buf = pack_stx(54, SET_DISCOUT, "Va5CCCCa40", $pass,
 	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
     my $res = ();
 
@@ -2582,7 +2591,7 @@ sub set_allowance
 {
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-    my $buf = pack_stx(54, SET_ALLOWANCE, "La5CCCCa40", $pass,
+    my $buf = pack_stx(54, SET_ALLOWANCE, "Va5CCCCa40", $pass,
 	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
     my $res = ();
 
@@ -2610,7 +2619,7 @@ sub set_allowance
 sub set_check_cancellation
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_CHECK_CANCELLATION, "L", $pass);
+    my $buf = pack_stx(5, SET_CHECK_CANCELLATION, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2637,7 +2646,7 @@ sub set_check_cancellation
 sub get_check_subtotal
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_CHECK_SUBTOTAL, "L", $pass);
+    my $buf = pack_stx(5, GET_CHECK_SUBTOTAL, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2666,7 +2675,7 @@ sub set_reversal_discount
 {
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-    my $buf = pack_stx(54, SET_REVERSAL_DISCOUNT, "La5CCCCa40", $pass,
+    my $buf = pack_stx(54, SET_REVERSAL_DISCOUNT, "Va5CCCCa40", $pass,
 	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
     my $res = ();
 
@@ -2695,7 +2704,7 @@ sub set_reversal_allowance
 {
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-    my $buf = pack_stx(54, SET_REVERSAL_ALLOWANCE, "La5CCCCa40", $pass,
+    my $buf = pack_stx(54, SET_REVERSAL_ALLOWANCE, "Va5CCCCa40", $pass,
 	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
     my $res = ();
 
@@ -2723,7 +2732,7 @@ sub set_reversal_allowance
 sub get_document_repeat
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, GET_DOCUMENT_REPEAT, "L", $pass);
+    my $buf = pack_stx(5, GET_DOCUMENT_REPEAT, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2752,7 +2761,7 @@ sub get_document_repeat
 sub set_check_open
 {
     my ($self, $pass, $type, undef) = @_;
-    my $buf = pack_stx(6, SET_CHECK_OPEN, "LC", $pass, $type);
+    my $buf = pack_stx(6, SET_CHECK_OPEN, "VC", $pass, $type);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2804,7 +2813,7 @@ sub set_check_open
 sub set_print_continue
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, SET_PRINT_CONTINUE, "L", $pass);
+    my $buf = pack_stx(5, SET_PRINT_CONTINUE, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2832,7 +2841,7 @@ sub set_print_continue
 sub set_load_graphics
 {
     my ($self, $pass, $linenum, $data, undef) = @_;
-    my $buf = pack_stx(46, SET_LOAD_GRAPHICS, "LCa40", $pass, $linenum, @{$data});
+    my $buf = pack_stx(46, SET_LOAD_GRAPHICS, "VCa40", $pass, $linenum, @{$data});
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2858,7 +2867,7 @@ sub set_load_graphics
 sub set_print_graphics
 {
     my ($self, $pass, $first, $last, $wait, undef) = @_;
-    my $buf = pack_stx(7, SET_PRINT_GRAPHICS, "LCC", $pass, $first, $last);
+    my $buf = pack_stx(7, SET_PRINT_GRAPHICS, "VCC", $pass, $first, $last);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2887,7 +2896,7 @@ sub set_print_barcode
 {
     # barcode is big int string
     my ($self, $pass, $barcode, $wait, undef) = @_;
-    my $buf = pack_stx(10, SET_PRINT_BARCODE, "La5", $pass, get_le_bigint5_from_string($barcode));
+    my $buf = pack_stx(10, SET_PRINT_BARCODE, "Va5", $pass, get_le_bigint5_from_string($barcode));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2915,7 +2924,7 @@ sub set_print_barcode
 sub set_load_ext_graphics
 {
     my ($self, $pass, $linenum, $data, undef) = @_;
-    my $buf = pack_stx(47, SET_LOAD_EXT_GRAPHICS, "Lva40", $pass, $linenum, @{$data});
+    my $buf = pack_stx(47, SET_LOAD_EXT_GRAPHICS, "Vva40", $pass, $linenum, @{$data});
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2941,7 +2950,7 @@ sub set_load_ext_graphics
 sub set_print_ext_graphics
 {
     my ($self, $pass, $first, $last, $wait, undef) = @_;
-    my $buf = pack_stx(9, SET_PRINT_EXT_GRAPHICS, "Lvv", $pass, $first, $last);
+    my $buf = pack_stx(9, SET_PRINT_EXT_GRAPHICS, "Vvv", $pass, $first, $last);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2969,7 +2978,61 @@ sub set_print_ext_graphics
 sub set_print_line
 {
     my ($self, $pass, $repeats, $data, $wait, undef) = @_;
-    my $buf = pack_stx(7 + scalar @{$data}, SET_PRINT_LINE, "Lva*", $pass, $repeats, @{$data});
+    my $buf = pack_stx(7 + scalar @{$data}, SET_PRINT_LINE, "Vva*", $pass, $repeats, @{$data});
+    my $res = ();
+
+    if($self->write_buf($buf))
+    {
+	if($self->wait_ack())
+	{
+	    my $buf = $self->wait_stx();
+	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+	    if($buf)
+	    {
+		my ($oper, undef) = unpack("C", $buf);
+		$res->{OPERATOR} = $oper;
+	    }
+	}
+    }
+
+    $self->printing_wait($pass) if($wait);
+
+    return $res;
+}
+
+sub set_daily_report_damp_buffer
+{
+    my ($self, $pass, undef) = @_;
+    my $buf = pack_stx(5, SET_DAILY_REPORT_DAMP_BUFFER, "V", $pass);
+    my $res = ();
+
+    if($self->write_buf($buf))
+    {
+	if($self->wait_ack())
+	{
+	    my $buf = $self->wait_stx();
+	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+	    if($buf)
+	    {
+		my ($oper, undef) = unpack("C", $buf);
+		$res->{OPERATOR} = $oper;
+	    }
+	}
+    }
+
+    return $res;
+}
+
+sub set_print_daily_report_buffer
+{
+    my ($self, $pass, $wait, undef) = @_;
+    my $buf = pack_stx(5, SET_PRINT_DAILY_REPORT_BUFFER, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2997,7 +3060,7 @@ sub set_print_line
 sub get_rowcount_printbuf
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_ROWCOUNT_PRINTBUF, "L", $pass);
+    my $buf = pack_stx(5, GET_ROWCOUNT_PRINTBUF, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -3024,7 +3087,7 @@ sub get_rowcount_printbuf
 sub get_string_printbuf
 {
     my ($self, $pass, $numstr, undef) = @_;
-    my $buf = pack_stx(7, GET_STRING_PRINTBUF, "Lv", $pass, $numstr);
+    my $buf = pack_stx(7, GET_STRING_PRINTBUF, "Vv", $pass, $numstr);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -3050,7 +3113,7 @@ sub get_string_printbuf
 sub set_clear_printbuf
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(7, SET_CLEAR_PRINTBUF, "L", $pass);
+    my $buf = pack_stx(7, SET_CLEAR_PRINTBUF, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -3070,7 +3133,7 @@ sub set_clear_printbuf
 sub get_fr_ibm_status_long
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_FR_IBM_STATUS_LONG, "L", $pass);
+    my $buf = pack_stx(5, GET_FR_IBM_STATUS_LONG, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -3113,7 +3176,7 @@ sub get_fr_ibm_status_long
 sub get_fr_ibm_status
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_FR_IBM_STATUS, "L", $pass);
+    my $buf = pack_stx(5, GET_FR_IBM_STATUS, "V", $pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -3138,10 +3201,196 @@ sub get_fr_ibm_status
     return $res;
 }
 
+sub set_open_nonfiscal_document
+{
+    my ($self, $pass, undef) = @_;
+    my $buf = pack_stx(5, SET_OPEN_NONFISCAL_DOCUMENT, "V", $pass);
+    my $res = ();
+
+    if($self->write_buf($buf))
+    {
+	if($self->wait_ack())
+	{
+	    my $buf = $self->wait_stx();
+	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+	    if($buf)
+	    {
+		my ($oper, undef) = unpack("C", $buf);
+		$res->{OPERATOR} = $oper;
+	    }
+	}
+    }
+
+    return $res;
+}
+
+sub set_close_nonfiscal_document
+{
+    my ($self, $pass, undef) = @_;
+    my $buf = pack_stx(5, SET_CLOSE_NONFISCAL_DOCUMENT, "V", $pass);
+    my $res = ();
+
+    if($self->write_buf($buf))
+    {
+	if($self->wait_ack())
+	{
+	    my $buf = $self->wait_stx();
+	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+	    if($buf)
+	    {
+		my ($oper, undef) = unpack("C", $buf);
+		$res->{OPERATOR} = $oper;
+	    }
+	}
+    }
+
+    return $res;
+}
+
+sub set_print_props
+{
+    my ($self, $pass, $propnum, $value, $wait, undef) = @_;
+    Encode::from_to($value, "utf8", "cp1251");
+    my $buf = pack_stx(6 + length($value), SET_PRINT_PROPS, "VCA*", $pass, $propnum, $value);
+    my $res = ();
+
+    if($self->write_buf($buf))
+    {
+	if($self->wait_ack())
+	{
+	    my $buf = $self->wait_stx();
+	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+	    if($buf)
+	    {
+		my ($oper, undef) = unpack("C", $buf);
+		$res->{OPERATOR} = $oper;
+	    }
+	}
+    }
+
+    $self->printing_wait($pass) if($wait);
+
+    return $res;
+}
+
+sub get_state_bill_acceptor
+{
+    my ($self, $pass, undef) = @_;
+    my $buf = pack_stx(5, GET_STATE_BILL_ACCEPTOR, "V", $pass);
+    my $res = ();
+
+    if($self->write_buf($buf))
+    {
+	if($self->wait_ack())
+	{
+	    my $buf = $self->wait_stx();
+	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+	    if($buf)
+	    {
+		my ($oper, $mode, $pool1, $pool2, undef) = unpack("CCCC", $buf);
+
+		$res->{OPERATOR} = $oper;
+		$res->{MODE} = $oper;
+		$res->{POOL1} = $pool1;
+		$res->{POOL2} = $pool2;
+	    }
+	}
+    }
+
+    return $res;
+}
+
+sub get_registers_bill_acceptor
+{
+    my ($self, $pass, $regnum, undef) = @_;
+    my $buf = pack_stx(6, GET_REGISTERS_BILL_ACCEPTOR, "VC", $pass, $regnum);
+    my $res = ();
+
+    if($self->write_buf($buf))
+    {
+	if($self->wait_ack())
+	{
+	    my $buf = $self->wait_stx();
+	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+	    if($buf)
+	    {
+		my ($oper, $numreg, $pool, @bills) = unpack("CCCCV*", $buf);
+
+		$res->{OPERATOR} = $oper;
+		$res->{REGISTERS_SETS_NUMBER} = $numreg;
+		$res->{NUMBER_OF_BILLS} = join(',', map(ord($_), @bills));
+	    }
+	}
+    }
+
+    return $res;
+}
+
+sub get_report_bill_acceptor
+{
+    my ($self, $pass, undef) = @_;
+    my $buf = pack_stx(5, GET_REPORT_BILL_ACCEPTOR, "V", $pass);
+    my $res = ();
+
+    if($self->write_buf($buf))
+    {
+	if($self->wait_ack())
+	{
+	    my $buf = $self->wait_stx();
+	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+	    if($buf)
+	    {
+		my ($oper, undef) = unpack("C", $buf);
+		$res->{OPERATOR} = $oper;
+	    }
+	}
+    }
+
+    return $res;
+}
+
+sub get_operational_report_ni
+{
+    my ($self, $pass, undef) = @_;
+    my $buf = pack_stx(5, GET_OPERATIONAL_REPORT_NI, "V", $pass);
+    my $res = ();
+
+    if($self->write_buf($buf))
+    {
+	if($self->wait_ack())
+	{
+	    $self->wait_stx();
+	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	}
+    }
+
+    return $res;
+}
+
 sub set_flap_control
 {
     my ($self, $pass, $status, undef) = @_;
-    my $buf = pack_stx(6, SET_FLAP_CONTROL, "LC", $pass, $status);
+    my $buf = pack_stx(6, SET_FLAP_CONTROL, "VC", $pass, $status);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -3167,7 +3416,7 @@ sub set_flap_control
 sub set_check_getout
 {
     my ($self, $pass, $type, undef) = @_;
-    my $buf = pack_stx(6, SET_CHECK_GETOUT, "LC", $pass, $type);
+    my $buf = pack_stx(6, SET_CHECK_GETOUT, "VC", $pass, $type);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -3193,7 +3442,7 @@ sub set_check_getout
 sub set_password_cto
 {
     my ($self, $old_pass, $new_pass, undef) = @_;
-    my $buf = pack_stx(9, SET_PASSWORD_CTO, "LL", $old_pass, $new_pass);
+    my $buf = pack_stx(9, SET_PASSWORD_CTO, "VL", $old_pass, $new_pass);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -3247,7 +3496,7 @@ sub get_device_type
 sub set_extdev_command
 {
     my ($self, $pass, $portnum, $data, undef) = @_;
-    my $buf = pack_stx(6 + length($data), SET_EXT_DEVICE_COMMAND, "LCC*", $pass, $portnum, unpack("C*", $data));
+    my $buf = pack_stx(6 + length($data), SET_EXT_DEVICE_COMMAND, "VCC*", $pass, $portnum, unpack("C*", $data));
     
     my $res = ();
 
