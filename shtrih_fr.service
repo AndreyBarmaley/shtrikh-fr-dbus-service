@@ -1,0 +1,1498 @@
+#!/usr/bin/perl
+#
+# Cash register dbus service for ShtrihFR
+# Copyright (C) 2015 by shtrikh.fr.dbus team <shtrikh.fr.dbus.service@gmail.com>
+# License: under the same terms as Perl itself (Artistic-1.0 or GPL-1.0+)
+#
+# params:
+# -d device path
+# -p pid file
+# -l log file
+# -s dbus service name
+
+use strict;
+use utf8;
+
+use Net::DBus;
+use Net::DBus::Reactor;
+use Net::DBus::Callback;
+
+use File::Basename qw(basename);
+use FindBin;
+use lib $FindBin::Bin . '/lib';
+
+use CashRegister::ShtrihFR;
+use POSIX qw(strftime);
+
+my $version = "20150427";
+my @ports = ( glob("/dev/ttyS*"), glob("/dev/ttyUSB*") );
+
+my $str_dbus_service = "ru.shtrih_m.fr";
+
+my ($shortname, undef) = split(/\./, basename($0));
+my $logfile = $FindBin::Bin . "/log/" . $shortname . ".log";
+my $pidfile = $FindBin::Bin . "/run/" . $shortname . ".pid";
+my $param = "";
+
+use Getopt::Std;
+
+my %params = ();
+getopts("d:p:l:s:h", \%params);
+
+# set device
+@ports = split(",", $params{d}) if(exists $params{d});
+
+# set pid file
+$pidfile = $params{p} if(exists $params{p});
+
+# set log file
+$logfile = $params{l} if(exists $params{l});
+
+# set service name
+$str_dbus_service = $params{s} if(exists $params{s});
+
+if(exists $params{h})
+{
+    print "usage: $0 -d <devices> -p <pidfile> -l <logfile> -s <dbus service name>\n";
+    exit 0;
+}
+
+my $str_dbus_object = "/" . join('/', split('\.', $str_dbus_service), "object");
+my $str_dbus_interface = $str_dbus_service . ".interface";
+
+package DBusKassaService;
+use base qw(Net::DBus::Object);
+require Net::DBus::Exporter;
+Net::DBus::Exporter->import($str_dbus_interface);
+
+sub new
+{
+    my $class = shift;
+    my $service = shift;
+    my $self = $class->SUPER::new($service, $str_dbus_object);
+
+    bless $self, $class;
+    return $self;
+}
+
+# create DBus
+my $dbus_handle = Net::DBus->system();
+unless($dbus_handle)
+{
+    Logger::Syslog::error("dbus: $!\n");
+    exit 2;
+}
+
+my $dbus_service = $dbus_handle->export_service($str_dbus_service);
+unless($dbus_handle)
+{
+    Logger::Syslog::error("dbus $str_dbus_service: $!\n");
+    exit 3;
+}
+
+# check running process
+if(-f $pidfile)
+{
+    my $pid = 0;
+    if(open(FN, "<", $pidfile))
+    {
+	$pid = <FN>;
+	close FN;
+    }
+
+    if($pid)
+    {
+	unlink($pidfile);
+
+	# check alive
+	unless(-f $pidfile)
+	{
+    	    kill USR2 => $pid;
+
+            for(1 .. 3)
+            {
+                sleep(1);
+
+                if(-f $pidfile)
+                {
+		    Logger::Syslog::error("service: is running, pid: " . $pid);
+                    exit 5;
+                }
+            }
+        }
+	else
+	{
+	    print "error: PID file present $pidfile, $!\n";
+	    exit 1;
+	}
+    }
+}
+
+my $dbus_object = DBusKassaService->new($dbus_service);
+unless($dbus_handle)
+{
+    Logger::Syslog::error("dbus kassa: $!\n");
+    exit 4;
+}
+
+$dbus_object->{DEVICE} = CashRegister::ShtrihFR->find_device(@ports);
+$dbus_object->{FPID} = $pidfile;
+$dbus_object->{FLOG} = $logfile;
+
+# define signals and methods
+dbus_signal("service_shutdown", []);
+dbus_method("device_is_online", [], ["bool"]);
+#
+dbus_method("device_get_dump", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_data", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_break", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_fiscalization_rnm", ["int32", "int32", "string", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_long_serial_number", ["int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_get_long_serial_number_rnm", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_status", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_status_short", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_bold_string", ["int32", "int32", "string", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_beep", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_communication_params", ["int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_communication_params", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_technical_zero", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_string", ["int32", "int32", "string", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_header", ["int32", "string", "int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_test_run", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_cache_register", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_operational_register", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_license", ["int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_get_license", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_write_table", ["int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_get_read_table", ["int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_decimal_point", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_current_time", ["int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_current_date", ["int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_date_confirm", ["int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_init_tables", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_cut_check", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_font_params", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_total_damping", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_open_money_box", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_scroll", ["int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_getout_backfilling_document", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_break_test_run", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_registers_values", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_structure_table", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_structure_field", ["int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_font_string", ["int32", "int32", "int32", "string", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_get_daily_report", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_get_daily_report_with_damp", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_get_sections_report", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_get_taxes_report", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_adding_amount", ["int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_get_payment_amount", ["int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_cliche", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_document_end", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_ad_text", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_serial_number", ["int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_fp_init", [], [["dict", "string", "string"]]);
+dbus_method("device_get_fp_sum_records", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_fp_last_record_date", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_query_date_range_tour", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_fiscalization", ["int32", "int32", "string", "string"], [["dict", "string", "string"]]);
+dbus_method("device_get_fiscal_report_by_date", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_fiscal_report_by_tour", ["int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_break_full_report", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_fiscalization_params", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_open_fiscal_underdoc", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
+    "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_standard_open_fiscal_underdoc", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_forming_operation_underdoc", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", 
+	"int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
+	"string", "string", "int32", "int32", "int32", "int32", "int32", "string" ], [["dict", "string", "string"]]);
+dbus_method("device_set_forming_standard_operation_underdoc", ["int32", "int32", "string", "string", "int32", "int32", "int32", "int32", "int32", "string" ], [["dict", "string", "string"]]);
+dbus_method("device_set_forming_discount_underdoc", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
+    "int32", "int32", "int32", "int32", "int32", "int32", "int32", "string", "int32", "int32", "int32", "int32", "string" ], [["dict", "string", "string"]]);
+dbus_method("device_set_forming_std_discount_underdoc", ["int32", "int32", "int32", "string", "int32", "int32", "int32", "int32", "string" ], [["dict", "string", "string"]]);
+dbus_method("device_set_forming_close_check_underdoc", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
+    "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
+    "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
+    "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
+    "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
+    "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
+    "int32", "string", "string", "string", "string", "double", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_forming_std_close_check_underdoc", ["int32", "int32", "string", "string", "string", "string", "double", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_configuration_underdoc", ["int32", "int32", "int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
+dbus_method("device_set_std_configuration_underdoc", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_fill_buffer_underdoc", ["int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_clear_string_underdoc", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_clear_buffer_underdoc", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_underdoc", ["int32", "int32", "int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_get_general_configuration_underdoc", ["int32", "int32", "int32", "int32", "int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_sell", ["int32", "string", "string", "int32", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_buy", ["int32", "string", "string", "int32", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_returns_sale", ["int32", "string", "string", "int32", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_returns_purchases", ["int32", "string", "string", "int32", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_reversal", ["int32", "string", "string", "int32", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_check_close", ["int32", "string", "string", "string", "string", "double", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_discount", ["int32", "string", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_allowance", ["int32", "string", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_check_cancellation", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_check_subtotal", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_reversal_discount", ["int32", "string", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_reversal_allowance", ["int32", "string", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_get_document_repeat", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_check_open", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_continue", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_load_graphics", ["int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
+dbus_method("device_set_print_graphics", ["int32", "int32", "int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_barcode", ["int32", "string", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_load_ext_graphics", ["int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
+dbus_method("device_set_print_ext_graphics", ["int32", "int32", "int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_line", ["int32", "int32", ["array", "byte"], "bool"], [["dict", "string", "string"]]);
+dbus_method("device_get_rowcount_printbuf", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_string_printbuf", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_clear_printbuf", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_fr_ibm_status_long", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_fr_ibm_status", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_flap_control", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_check_getout", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_password_cto", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_type", [], [["dict", "string", "string"]]);
+dbus_method("device_set_extdev_command", ["int32", "int32", "string"], [["dict", "string", "string"]]);
+
+# connect
+$dbus_object->connect_to_signal("service_shutdown", sub { $dbus_object->service_shutdown(); } );
+
+# set signals
+$SIG{USR2} = sub { $dbus_object->create_lock(); };
+$SIG{INT} = $SIG{TERM} = sub { $dbus_object->service_shutdown(); };
+
+$dbus_object->create_lock();
+
+# init log (set autoflush)
+$| = 1;
+
+if(open(STDOUT, '>>', $dbus_object->{FLOG}))
+{
+    open(STDERR, '>>', $dbus_object->{FLOG});
+}
+else
+{
+    print "error write to ", $dbus_object->{FLOG}, " ($!)\n";
+    open(STDOUT, '>>', '/dev/null');
+    open(STDERR, '>>', '/dev/null');
+}
+$dbus_object->syslog("info", "service starting, version: ", $version);
+
+if($dbus_object->{DEVICE})
+{
+    $dbus_object->syslog("info", "device found: ", $dbus_object->{DEVICE}->{PORT}, ", speed: ", $dbus_object->{DEVICE}->{SPEED});
+}
+else
+{
+    $dbus_object->syslog("error", "device not found: ", join(", ", @ports));
+}
+
+my $reactor = Net::DBus::Reactor->main();
+$reactor->run();
+
+$dbus_object->service_shutdown();
+exit 0;
+
+sub create_lock
+{
+    my $self = shift;
+    unless(-f $self->{FPID})
+    {
+	if(open(FN, ">", $self->{FPID}))
+	{
+	    print FN $$;
+	    close(FN);
+	}
+    }
+}
+
+sub syslog
+{
+    my $self = shift;
+    my $name = shift;
+    my $date = POSIX::strftime("%Y-%m-%d", localtime);
+    my $time = POSIX::strftime("%H:%M:%S", localtime);
+    print "$date $time\t<$name>\t@_\n";
+}
+
+### implemented methods ##################################################################################
+
+sub device_is_online
+{
+    my $self = shift;
+
+    # auto scan device
+    unless($self->{DEVICE})
+    {
+	$self->{DEVICE} = CashRegister::ShtrihFR->find_device(@ports);
+	$self->syslog("info", "device found: ", $self->{DEVICE}->{PORT}, ", speed: ", $self->{DEVICE}->{SPEED}) if($self->{DEVICE});
+    }
+
+    if($self->{DEVICE})
+    {
+	return 1 if($self->{DEVICE}->is_online());
+	$self->syslog("error", "device is offline");
+    }
+
+    return 0;
+}
+
+sub device_get_error
+{
+    my $self = shift;
+
+    if($self->device_is_online())
+    {
+	return $self->{DEVICE}->{ERROR_MESSAGE};
+    }
+
+    return $self->{DEVICE} ? "device offline" : "device not found";
+}
+
+sub device_get_dump
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_dump(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_data
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_data(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_break
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_break(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_fiscalization_rnm
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_fiscalization_long_rnm(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_long_serial_number
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_long_serial_number(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_long_serial_number_rnm
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_long_serial_number_rnm(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_status_short
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_short_status(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_status
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_device_status(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_bold_string
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_bold_string(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_beep
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_beep(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_communication_params
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_communication_params(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_communication_params
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_communication_params(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_technical_zero
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_technical_zero(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_string
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_string(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_header
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_header(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_test_run
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_test_run(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_cache_register
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_cache_register(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_operational_register
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_operational_register(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_license
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_license(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_license
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_license(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_write_table
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_write_table(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_read_table
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_read_table(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_decimal_point
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_decimal_point(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_current_time
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_current_time(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_current_date
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_current_date(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_date_confirm
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_date_confirm(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_init_tables
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_init_tables(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_cut_check
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_cut_check(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_font_params
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_font_params(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_total_damping
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_total_damping(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_open_money_box
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_open_money_box(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_scroll
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_scroll(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_getout_backfilling_document
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_getout_backfilling_document(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_break_test_run
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_break_test_run(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_registers_values
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_registers_values(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_structure_table
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_structure_table(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_structure_field
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_structure_field(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_font_string
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_font_string(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_daily_report
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_daily_report(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_daily_report_with_damp
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_daily_report_with_damp(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_sections_report
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_sections_report(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_taxes_report
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_taxes_report(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_adding_amount
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_adding_amount(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_payment_amount
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_payment_amount(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_cliche
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_cliche(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_document_end
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_document_end(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_ad_text
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_ad_text(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_serial_number
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_serial_number(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_fp_init
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_fp_init(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_fp_sum_records
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fp_sum_records(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_fp_last_record_date
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fp_last_record_date(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_query_date_range_tour
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_query_date_range_tour(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_fiscalization
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_fiscalization(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_fiscal_report_by_date
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fiscal_report_by_date(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_fiscal_report_by_tour
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fiscal_report_by_tour(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_break_full_report
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_break_full_report(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_fiscalization_params
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fiscalization_params(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_open_fiscal_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_open_fiscal_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_open_standard_fiscal_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_open_standard_fiscal_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_forming_operation_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_forming_operation_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_forming_standard_operation_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_forming_standard_operation_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_forming_discount_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_forming_discount_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_forming_std_discount_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_forming_std_discount_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_forming_close_check_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_forming_close_check_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_forming_std_close_check_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_forming_std_close_check_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_configuration_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_configuration_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_std_configuration_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_std_configuration_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_fill_buffer_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_fill_buffer_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_clear_string_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_clear_string_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_clear_buffer_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_clear_buffer_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_general_configuration_underdoc
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_general_configuration_underdoc(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_sell
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_sell(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_buy
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_buy(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_returns_sale
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_returns_sale(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_returns_purchases
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_returns_purchases(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_reversal
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_reversal(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_check_close
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_check_close(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_discount
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_discount(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_allowance
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_allowance(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_check_cancellation
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_check_cancellation(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_check_subtotal
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_check_subtotal(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_reversal_discount
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_reversal_discount(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_reversal_allowance
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_reversal_allowance(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_document_repeat
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_document_repeat(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_check_open
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_check_open(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_continue
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_continue(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_load_graphics
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_load_graphics(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_graphics
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_graphics(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_barcode
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_barcode(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_load_ext_graphics
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_load_ext_graphics(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_ext_graphics
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_ext_graphics(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_print_line
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_line(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_rowcount_printbuf
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_rowcount_printbuf(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_string_printbuf
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_string_printbuf(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_clear_printbuf
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_clear_printbuf(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_fr_ibm_status_long
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fr_ibm_status_long(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_fr_ibm_status
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fr_ibm_status(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_flap_control
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_flap_control(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_check_getout
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_check_getout(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_password_cto
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_password_cto(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_get_type
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_device_type(@_) : { ERROR_CODE => -1 };
+}
+
+sub device_set_extdev_command
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_extdev_command(@_) : { ERROR_CODE => -1 };
+}
+
+sub service_shutdown
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    unlink($pidfile);
+
+    exit 0;
+}

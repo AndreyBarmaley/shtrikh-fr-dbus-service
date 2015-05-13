@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=ru.shtrih_m.fr
+Exec=/opt/git/shtrih_fr/dbus/shtrih_fr.service
+User=root

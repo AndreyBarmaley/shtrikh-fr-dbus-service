@@ -1,0 +1,945 @@
+#
+# usage docs: ftp://ftp.shtrih-m.ru/download/FR/shtrih-fr-k/Protocol/Protocol_FP_1.7.pdf
+#
+
+# 1. tools command:
+
+service_shutdown
+params: none
+return: none
+
+device_is_online
+params: none
+return: bool
+
+# 2. device command:
+
+command: 0x01
+call:   device_get_dump 
+params: password, int32
+params: subsystem, int32
+return: dict["string", "string"]
+
+command: 0x02
+call:   device_get_data
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x03
+call:   device_set_break
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x0D
+call:   device_set_fiscalization_rnm
+params: old pass, int32
+params: new pass, int32
+params: RNM, string	# rnm is 7 byte: "00000000000000"
+params: INN, string	# inn is 6 byte: "000000000000"
+return: dict["string", "string"]
+
+command: 0x0E
+call:   device_set_long_serial_number
+params: password, int32
+params: serial, string	# serial is 7 byte: "00000000000000"
+return: dict["string", "string"]
+
+command: 0x0F
+call:   device_get_long_serial_number_rnm
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x10
+call:   device_get_status_short
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x11
+call:   device_get_status
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x12
+call:   device_set_print_bold_string
+params: password, int32
+params: flag, int32
+params: message, string
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x13
+call:   device_set_beep
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x14
+call:   device_set_communication_params
+params: password, int32
+params: portnum, int32
+params: bod, int32
+params: timeout, int32
+return: dict["string", "string"]
+
+command: 0x15
+call:   device_get_communication_params
+params: password, int32
+params: port number, int32
+return: dict["string", "string"]
+
+command: 0x16
+call:   device_set_technical_zero
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x17
+call:   device_set_print_string
+params: password, int32
+params: flag, int32
+params: message, string
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x18
+call:   device_set_print_header
+params: password, int32
+params: docname, string
+params: docnumber, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x19
+call:   device_set_test_run
+params: password, int32
+params: period, int32
+return: dict["string", "string"]
+
+command: 0x1A
+call:   device_get_cache_register
+params: password, int32
+params: regnum, int32
+return: dict["string", "string"]
+
+command: 0x1B
+call:   device_get_operational_register
+params: password, int32
+params: regnum, int32
+return: dict["string", "string"]
+
+command: 0x1C
+call:   device_set_license
+params: password, int32
+params: license, string	# license is 5 byte: "0000000000"
+return: dict["string", "string"]
+
+command: 0x1D
+call:   device_get_license
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x1E
+call:   device_set_write_table
+params: password, int32
+params: table, int32
+params: column, int32
+params: field, int32
+params: data, string
+return: dict["string", "string"]
+
+command: 0x1F
+call:   device_get_read_table
+params: password, int32
+params: table, int32
+params: column, int32
+params: field, int32
+return: dict["string", "string"]
+
+command: 0x20
+call:   device_set_decimal_point
+params: password, int32
+params: pos, int32
+return: dict["string", "string"]
+
+command: 0x21
+call:   device_set_current_time
+params: password, int32
+params: hour, int32
+params: min, int32
+params: sec, int32
+return: dict["string", "string"]
+
+command: 0x22
+call:   device_set_current_date
+params: password, int32
+params: year, int32
+params: mon, int32
+params: day, int32
+return: dict["string", "string"]
+
+command: 0x23
+call:   device_set_date_confirm
+params: password, int32
+params: year, int32
+params: mon, int32
+params: day, int32
+return: dict["string", "string"]
+
+command: 0x24
+call:   device_set_init_tables
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x25
+call:   device_set_cut_check
+params: password, int32
+params: type, int32
+return: dict["string", "string"]
+
+command: 0x26
+call:   device_get_font_params
+params: password, int32
+params: fontnum, int32
+return: dict["string", "string"]
+
+command: 0x27
+call:   device_set_total_damping
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x28
+call:   device_set_open_money_box
+params: password, int32
+params: boxnum, int32
+return: dict["string", "string"]
+
+command: 0x29
+call:   device_set_scroll
+params: password, int32
+params: flags, int32
+params: rows, int32
+return: dict["string", "string"]
+
+command: 0x2A
+call:   device_set_getout_backfilling_document
+params: password, int32
+params: direct, int32
+return: dict["string", "string"]
+
+command: 0x2B
+call:   device_set_break_test_run
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x2C
+call:   device_get_registers_values
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x2D
+call:   device_get_structure_table
+params: password, int32
+params: table num, int32
+return: dict["string", "string"]
+
+command: 0x2E
+call:   device_get_structure_field
+params: password, int32
+params: table num, int32
+params: field num, int32
+return: dict["string", "string"]
+
+command: 0x2F
+call:   device_set_print_font_string
+params: password, int32
+params: flag, int32
+params: font num, int32
+params: message, string
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x40
+call:   device_get_daily_report
+params: password, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x41
+call:   device_get_daily_report_with_damp
+params: password, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x42
+call:   device_get_sections_report
+params: password, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x43
+call:   device_get_taxes_report
+params: password, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x50
+call:   device_set_adding_amount
+params: password, int32
+params: amount, string (big int)
+return: dict["string", "string"]
+
+command: 0x51
+call:   device_get_payment_amount
+params: password, int32
+params: amount, string (big int)
+return: dict["string", "string"]
+
+command: 0x52
+call:   device_set_print_cliche
+params: password, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x53
+call:   device_set_document_end
+params: password, int32
+params: params, int32
+return: dict["string", "string"]
+
+command: 0x54
+call:   device_set_print_ad_text
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x60
+call:   device_set_serial_number
+params: password, int32
+params: serial, string	# serial is 4 byte: "00000000"
+return: dict["string", "string"]
+
+command: 0x61
+call:   device_set_fp_init
+params: void
+return: dict["string", "string"]
+
+command: 0x62
+call:   device_get_fp_sum_records
+params: password, int32
+params: type, int32
+return: dict["string", "string"]
+
+command: 0x63
+call:   device_get_fp_last_record_date
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x64
+call:   device_get_query_date_range_tour
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x65
+call:   device_set_fiscalization
+params: old password, int32
+params: new password, int32
+params: RNM, string	# rnm is 5 byte: "0000000000"
+params: INN, string	# inn is 6 byte: "000000000000"
+return: dict["string", "string"]
+
+command: 0x66
+call:   device_get_fiscal_report_by_date
+params: password, int32
+params: type report, int32
+params: first year, int32
+params: first month, int32
+params: first day, int32
+params: last year, int32
+params: last month, int32
+params: last day, int32
+return: dict["string", "string"]
+
+command: 0x67
+call:   device_get_fiscal_report_by_tour
+params: password, int32
+params: type report, int32
+params: first num, int32
+params: last num, int32
+return: dict["string", "string"]
+
+command: 0x68
+call:   device_set_break_full_report
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x69
+call:   device_get_fiscalization_params
+params: password, int32
+params: number, int32
+return: dict["string", "string"]
+
+command: 0x70
+call:   device_set_open_fiscal_underdoc
+params: password, int32
+params: type, int32
+params: print doubles, int32
+params: count doubles, int32
+params: offset orig-first, int32
+params: offset first-second, int32
+params: offset second-third, int32
+params: offset third-fourth, int32
+params: offset fourth-fifth, int32
+params: font number cliche, int32
+params: font number header, int32
+params: font number eklz, int32
+params: font number kpk, int32
+params: string number cliche, int32
+params: string number header, int32
+params: string number eklz, int32
+params: string number repeat, int32
+params: offset cliche, int32
+params: offset header, int32
+params: offset eklz, int32
+params: offset kpk, int32
+params: offset repeat, int32
+return: dict["string", "string"]
+
+command: 0x71
+call:   device_set_open_standard_fiscal_underdoc
+params: password, int32
+params: type, int32
+params: print doubles, int32
+params: count doubles, int32
+params: offset orig-first, int32
+params: offset first-second, int32
+params: offset second-third, int32
+params: offset third-fourth, int32
+params: offset fourth-fifth, int32
+return: dict["string", "string"]
+
+command: 0x72
+call:   device_set_forming_operation_underdoc
+params: password, int32
+params: number format, int32
+params: string count, int32
+params: string number, int32
+params: string number mul, int32
+params: string number sum, int32
+params: string number dep, int32
+params: font number str, int32
+params: font number count, int32
+params: font number mul, int32
+params: font number price, int32
+params: font number sum, int32
+params: font number dep, int32
+params: count sym field str, int32
+params: count sym field count, int32
+params: count sym field price, int32
+params: count sym field sum, int32
+params: count sym field dep, int32
+params: offset field str, int32
+params: offset field mul, int32
+params: offset field sum, int32
+params: offset field dep, int32
+params: number string pd, int32
+params: amount, string (big int)
+params: price, string (big int)
+params: department, int32
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string		# text is 40 byte max
+return: dict["string", "string"]
+
+command: 0x73
+call:   device_set_forming_standard_operation_underdoc
+params: password, int32
+params: number string pd, int32
+params: amount, string (big int)
+params: price, string (big int)
+params: department, int32
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x74
+call:   device_set_forming_discount_underdoc
+params: password, int32
+params: string count, int32
+params: string number str, int32
+params: string number name, int32
+params: string number sum, int32
+params: font number str, int32
+params: font number name, int32
+params: font number sum, int32
+params: count sym field str, int32
+params: count sym field sum, int32
+params: offset field str, int32
+params: offset field name, int32
+params: offset field sum, int32
+params: operation type, int32
+params: number string pd, int32
+params: amount, string (big int)
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x75
+call:   device_set_forming_std_discount_underdoc
+params: password, int32
+params: operation type, int32
+params: number string pd, int32
+params: amount, string (big int)
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x76
+call:   device_set_forming_close_check_underdoc
+params: password, int32
+params: string count, int32
+params: string number amount, int32
+params: string number str, int32
+params: string number cash, int32
+params: string number payment type2, int32
+params: string number payment type3, int32
+params: string number payment type4, int32
+params: string number short change, int32
+params: string number return tax a, int32
+params: string number return tax b, int32
+params: string number return tax v, int32
+params: string number return tax g, int32
+params: string number sum tax a, int32
+params: string number sum tax b, int32
+params: string number sum tax v, int32
+params: string number sum tax g, int32
+params: string number sum accrual discount, int32
+params: string number sum discount, int32
+params: font number str, int32
+params: font number itog, int32
+params: font number itog sum, int32
+params: font number cash, int32
+params: font number cash sum, int32
+params: font number payment name2, int32
+params: font number payment sum2, int32
+params: font number payment name3, int32
+params: font number payment sum3, int32
+params: font number payment name4, int32
+params: font number payment sum4, int32
+params: font number change, int32
+params: font number change sum, int32
+params: font number tax name a, int32
+params: font number tax return a, int32
+params: font number tax rate a, int32
+params: font number tax sum a, int32
+params: font number tax name b, int32
+params: font number tax return b, int32
+params: font number tax rate b, int32
+params: font number tax sum b, int32
+params: font number tax name v, int32
+params: font number tax return v, int32
+params: font number tax rate v, int32
+params: font number tax sum v, int32
+params: font number tax name g, int32
+params: font number tax return g, int32
+params: font number tax rate g, int32
+params: font number tax sum g, int32
+params: font number total, int32
+params: font number sum discount, int32
+params: font number discount xx, int32
+params: font number sum discount check, int32
+params: count sym field str, int32
+params: count sym field sum itog, int32
+params: count sym field sum cash, int32
+params: count sym field type2, int32
+params: count sym field type3, int32
+params: count sym field type4, int32
+params: count sym field change, int32
+params: count sym field tax name a, int32
+params: count sym field tax return a, int32
+params: count sym field tax rate a, int32
+params: count sym field tax sum a, int32
+params: count sym field tax name b, int32
+params: count sym field tax return b, int32
+params: count sym field tax rate b, int32
+params: count sym field tax sum b, int32
+params: count sym field tax name v, int32
+params: count sym field tax return v, int32
+params: count sym field tax rate v, int32
+params: count sym field tax sum v, int32
+params: count sym field tax name g, int32
+params: count sym field tax return g, int32
+params: count sym field tax rate g, int32
+params: count sym field tax sum g, int32
+params: count sym field sum discount, int32
+params: count sym field sum procent check, int32
+params: count sym field sum discount check, int32
+params: offset field str, int32
+params: offset field itog, int32
+params: offset field itog sum, int32
+params: offset field cash, int32
+params: offset field cash sum, int32
+params: offset field payment name2, int32
+params: offset field payment sum2, int32
+params: offset field payment name3, int32
+params: offset field payment sum3, int32
+params: offset field payment name4, int32
+params: offset field payment sum4, int32
+params: offset field change, int32
+params: offset field change sum, int32
+params: offset field tax name a, int32
+params: offset field tax return a, int32
+params: offset field tax rate a, int32
+params: offset field tax sum a, int32
+params: offset field tax name b, int32
+params: offset field tax return b, int32
+params: offset field tax rate b, int32
+params: offset field tax sum b, int32
+params: offset field tax name v, int32
+params: offset field tax return v, int32
+params: offset field tax rate v, int32
+params: offset field tax sum v, int32
+params: offset field tax name g, int32
+params: offset field tax return g, int32
+params: offset field tax rate g, int32
+params: offset field tax sum g, int32
+params: offset field total, int32
+params: offset field sum accrual discount, int32
+params: offset field discount xx, int32
+params: offset field sum discount, int32
+params: number string pd, int32
+params: amount, string (big int)
+params: amount type2, string (big int)
+params: amount type3, string (big int)
+params: amount type4, string (big int)
+params: discout on check, double (0 - 99,99)
+params: tax1, int32
+params: tax2, int32
+params: tax3, int32
+params: tax4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x77
+call:   device_set_forming_std_close_check_underdoc
+params: password, int32
+params: number string pd, int32
+params: amount, string (big int)
+params: amount type2, string (big int)
+params: amount type3, string (big int)
+params: amount type4, string (big int)
+params: discout on check, double (0 - 99,99)
+params: tax1, int32
+params: tax2, int32
+params: tax3, int32
+params: tax4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x78
+call:   device_set_configuration_underdoc
+params: password, int32
+params: width underdoc, int32
+params: length underdoc, int32
+params: print direction, int32
+params: line spacing, ["array", "byte"] # is 199 byte
+return: dict["string", "string"]
+
+command: 0x79
+call:   device_set_std_configuration_underdoc
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x7A
+call:   device_set_fill_buffer_underdoc
+params: password, int32
+params: string number, int32
+params: data, string
+return: dict["string", "string"]
+
+command: 0x7B
+call:   device_set_clear_string_underdoc
+params: password, int32
+params: string number, int32
+return: dict["string", "string"]
+
+command: 0x7C
+call:   device_set_clear_buffer_underdoc
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x7D
+call:   device_set_print_underdoc
+params: password, int32
+params: clear, int32
+params: type, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x7E
+call:   device_get_general_configuration_underdoc
+params: password, int32
+params: width, int32
+params: length, int32
+params: spacing, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x80
+call:   device_set_sell
+params: password, int32
+params: quality, string (big int)
+params: price, string (big int)
+params: department, int32
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x81
+call:   device_set_buy
+params: password, int32
+params: quality, string (big int)
+params: price, string (big int)
+params: department, int32
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x82
+call:   device_set_returns_sale
+params: password, int32
+params: quality, string (big int)
+params: price, string (big int)
+params: department, int32
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x83
+call:   device_set_returns_purchases
+params: password, int32
+params: quality, string (big int)
+params: price, string (big int)
+params: department, int32
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x84
+call:   device_set_reversal
+params: password, int32
+params: quality, string (big int)
+params: price, string (big int)
+params: department, int32
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x85
+call:   device_set_check_close
+params: password, int32
+params: cash sum, string (big int)
+params: sum payment type2, string (big int)
+params: sum payment type3, string (big int)
+params: sum payment type4, string (big int)
+params: discount, double
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x86
+call:   device_set_discount
+params: password, int32
+params: amount, string (big int)
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x87
+call:   device_set_allowance
+params: password, int32
+params: amount, string (big int)
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x88
+call:   device_set_check_cancellation
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x89
+call:   device_get_check_subtotal
+params: password, int32
+return: dict["string", "string"]
+
+command: 0x8A
+call:   device_set_reversal_discount
+params: password, int32
+params: amount, string (big int)
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x8B
+call:   device_set_reversal_allowance
+params: password, int32
+params: amount, string (big int)
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x8C
+call:   device_get_document_repeat
+params: password, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x8D
+call:   device_set_check_open
+params: password, int32
+params: type, int32
+return: dict["string", "string"]
+
+command: 0xB0
+call:   device_set_print_continue
+params: password, bool
+return: dict["string", "string"]
+
+command: 0xC0
+call:   device_set_load_graphics
+params: password, int32
+params: linenum, int32
+params: data, ["array", "byte"] # data is 40 byte
+return: dict["string", "string"]
+
+command: 0xC1
+call:   device_set_print_graphics
+params: password, int32
+params: first line, int32
+params: last line, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0xC2
+call:   device_set_print_barcode
+params: password, int32
+params: barcode, string	# barcode is big int, 5 byte string: "0000000000"
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0xC3
+call:   device_set_load_ext_graphics
+params: password, int32
+params: linenum, int32
+params: data, ["array", "byte"] # data is 40 byte
+return: dict["string", "string"]
+
+command: 0xC4
+call:   device_set_print_ext_graphics
+params: password, int32
+params: first line, int32
+params: last line, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0xC5
+call:   device_set_print_line
+params: password, int32
+params: repeats, int32
+params: data, ["array", "byte"]
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0xC6
+call:   device_get_rowcount_printbuf
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xC7
+call:   device_get_string_printbuf
+params: password, int32
+params: string num, int32
+return: dict["string", "string"]
+
+command: 0xC8
+call:   device_set_clear_printbuf
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xD0
+call:   device_get_fr_ibm_status_long
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xD1
+call:   device_get_fr_ibm_status
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xF0
+call:   device_set_flap_control
+params: password, int32
+params: status, int32
+return: dict["string", "string"]
+
+command: 0xF1
+call:   device_set_check_getout
+params: password, int32
+params: type, int32
+return: dict["string", "string"]
+
+command: 0xF3
+call:   device_set_password_cto
+params: old pass, int32
+params: new pass, int32
+return: dict["string", "string"]
+
+command: 0xFC
+call:   device_get_type
+params: none
+return: dict["string", "string"]
+
+command: 0xFD
+call:   device_set_extdev_command
+params: password, int32
+params: portnum, int32
+params: data, string
+return: dict["string", "string"]

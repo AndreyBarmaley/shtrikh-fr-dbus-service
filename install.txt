@@ -1,0 +1,8 @@
+1. /etc/dbus-1/system.conf: define servicedir tag
+   <standard_system_servicedirs/>
+   <servicedir>/etc/dbus-1/system-services</servicedir>
+
+2. ru.shtrih_m.fr.service: fix exec path for shtrih_fr.service
+
+3. ru.shtrih_m.fr.conf: copy to  /etc/dbus-1/system.d
+4. ru.shtrih_m.fr.service: copy to /etc/dbus-1/system-services
