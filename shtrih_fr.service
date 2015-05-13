@@ -369,7 +369,7 @@ sub device_get_dump
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_dump(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_dump(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_data
@@ -380,7 +380,7 @@ sub device_get_data
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_data(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_data(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_break
@@ -391,7 +391,7 @@ sub device_set_break
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_break(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_break(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_fiscalization_rnm
@@ -402,7 +402,7 @@ sub device_set_fiscalization_rnm
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_fiscalization_long_rnm(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_fiscalization_long_rnm(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_long_serial_number
@@ -413,7 +413,7 @@ sub device_set_long_serial_number
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_long_serial_number(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_long_serial_number(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_long_serial_number_rnm
@@ -424,7 +424,7 @@ sub device_get_long_serial_number_rnm
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_long_serial_number_rnm(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_long_serial_number_rnm(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_status_short
@@ -435,7 +435,7 @@ sub device_get_status_short
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_short_status(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_short_status(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_status
@@ -446,7 +446,7 @@ sub device_get_status
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_device_status(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_device_status(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_bold_string
@@ -457,7 +457,7 @@ sub device_set_print_bold_string
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_bold_string(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_bold_string(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_beep
@@ -468,7 +468,7 @@ sub device_set_beep
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_beep(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_beep(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_communication_params
@@ -479,7 +479,7 @@ sub device_set_communication_params
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_communication_params(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_communication_params(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_communication_params
@@ -490,7 +490,7 @@ sub device_get_communication_params
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_communication_params(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_communication_params(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_technical_zero
@@ -501,7 +501,7 @@ sub device_set_technical_zero
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_technical_zero(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_technical_zero(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_string
@@ -512,7 +512,7 @@ sub device_set_print_string
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_string(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_string(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_header
@@ -523,7 +523,7 @@ sub device_set_print_header
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_header(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_header(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_test_run
@@ -534,7 +534,7 @@ sub device_set_test_run
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_test_run(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_test_run(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_cache_register
@@ -545,7 +545,7 @@ sub device_get_cache_register
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_cache_register(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_cache_register(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_operational_register
@@ -556,7 +556,7 @@ sub device_get_operational_register
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_operational_register(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_operational_register(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_license
@@ -567,7 +567,7 @@ sub device_set_license
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_license(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_license(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_license
@@ -578,7 +578,7 @@ sub device_get_license
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_license(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_license(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_write_table
@@ -589,7 +589,7 @@ sub device_set_write_table
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_write_table(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_write_table(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_read_table
@@ -600,7 +600,7 @@ sub device_get_read_table
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_read_table(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_read_table(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_decimal_point
@@ -611,7 +611,7 @@ sub device_set_decimal_point
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_decimal_point(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_decimal_point(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_current_time
@@ -622,7 +622,7 @@ sub device_set_current_time
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_current_time(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_current_time(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_current_date
@@ -633,7 +633,7 @@ sub device_set_current_date
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_current_date(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_current_date(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_date_confirm
@@ -644,7 +644,7 @@ sub device_set_date_confirm
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_date_confirm(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_date_confirm(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_init_tables
@@ -655,7 +655,7 @@ sub device_set_init_tables
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_init_tables(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_init_tables(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_cut_check
@@ -666,7 +666,7 @@ sub device_set_cut_check
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_cut_check(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_cut_check(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_font_params
@@ -677,7 +677,7 @@ sub device_get_font_params
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_font_params(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_font_params(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_total_damping
@@ -688,7 +688,7 @@ sub device_set_total_damping
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_total_damping(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_total_damping(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_open_money_box
@@ -699,7 +699,7 @@ sub device_set_open_money_box
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_open_money_box(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_open_money_box(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_scroll
@@ -710,7 +710,7 @@ sub device_set_scroll
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_scroll(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_scroll(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_getout_backfilling_document
@@ -721,7 +721,7 @@ sub device_set_getout_backfilling_document
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_getout_backfilling_document(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_getout_backfilling_document(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_break_test_run
@@ -732,7 +732,7 @@ sub device_set_break_test_run
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_break_test_run(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_break_test_run(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_registers_values
@@ -743,7 +743,7 @@ sub device_get_registers_values
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_registers_values(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_registers_values(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_structure_table
@@ -754,7 +754,7 @@ sub device_get_structure_table
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_structure_table(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_structure_table(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_structure_field
@@ -765,7 +765,7 @@ sub device_get_structure_field
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_structure_field(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_structure_field(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_font_string
@@ -776,7 +776,7 @@ sub device_set_print_font_string
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_font_string(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_font_string(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_daily_report
@@ -787,7 +787,7 @@ sub device_get_daily_report
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_daily_report(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_daily_report(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_daily_report_with_damp
@@ -798,7 +798,7 @@ sub device_get_daily_report_with_damp
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_daily_report_with_damp(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_daily_report_with_damp(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_sections_report
@@ -809,7 +809,7 @@ sub device_get_sections_report
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_sections_report(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_sections_report(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_taxes_report
@@ -820,7 +820,7 @@ sub device_get_taxes_report
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_taxes_report(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_taxes_report(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_adding_amount
@@ -831,7 +831,7 @@ sub device_set_adding_amount
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_adding_amount(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_adding_amount(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_payment_amount
@@ -842,7 +842,7 @@ sub device_get_payment_amount
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_payment_amount(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_payment_amount(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_cliche
@@ -853,7 +853,7 @@ sub device_set_print_cliche
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_cliche(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_cliche(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_document_end
@@ -864,7 +864,7 @@ sub device_set_document_end
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_document_end(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_document_end(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_ad_text
@@ -875,7 +875,7 @@ sub device_set_print_ad_text
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_ad_text(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_ad_text(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_serial_number
@@ -886,7 +886,7 @@ sub device_set_serial_number
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_serial_number(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_serial_number(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_fp_init
@@ -897,7 +897,7 @@ sub device_set_fp_init
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_fp_init(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_fp_init(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_fp_sum_records
@@ -908,7 +908,7 @@ sub device_get_fp_sum_records
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_fp_sum_records(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_fp_sum_records(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_fp_last_record_date
@@ -919,7 +919,7 @@ sub device_get_fp_last_record_date
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_fp_last_record_date(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_fp_last_record_date(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_query_date_range_tour
@@ -930,7 +930,7 @@ sub device_get_query_date_range_tour
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_query_date_range_tour(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_query_date_range_tour(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_fiscalization
@@ -941,7 +941,7 @@ sub device_set_fiscalization
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_fiscalization(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_fiscalization(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_fiscal_report_by_date
@@ -952,7 +952,7 @@ sub device_get_fiscal_report_by_date
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_fiscal_report_by_date(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_fiscal_report_by_date(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_fiscal_report_by_tour
@@ -963,7 +963,7 @@ sub device_get_fiscal_report_by_tour
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_fiscal_report_by_tour(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_fiscal_report_by_tour(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_break_full_report
@@ -974,7 +974,7 @@ sub device_set_break_full_report
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_break_full_report(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_break_full_report(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_fiscalization_params
@@ -985,7 +985,7 @@ sub device_get_fiscalization_params
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_fiscalization_params(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_fiscalization_params(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_open_fiscal_underdoc
@@ -996,7 +996,7 @@ sub device_set_open_fiscal_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_open_fiscal_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_open_fiscal_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_open_standard_fiscal_underdoc
@@ -1007,7 +1007,7 @@ sub device_set_open_standard_fiscal_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_open_standard_fiscal_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_open_standard_fiscal_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_forming_operation_underdoc
@@ -1018,7 +1018,7 @@ sub device_set_forming_operation_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_forming_operation_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_forming_operation_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_forming_standard_operation_underdoc
@@ -1029,7 +1029,7 @@ sub device_set_forming_standard_operation_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_forming_standard_operation_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_forming_standard_operation_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_forming_discount_underdoc
@@ -1040,7 +1040,7 @@ sub device_set_forming_discount_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_forming_discount_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_forming_discount_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_forming_std_discount_underdoc
@@ -1051,7 +1051,7 @@ sub device_set_forming_std_discount_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_forming_std_discount_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_forming_std_discount_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_forming_close_check_underdoc
@@ -1062,7 +1062,7 @@ sub device_set_forming_close_check_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_forming_close_check_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_forming_close_check_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_forming_std_close_check_underdoc
@@ -1073,7 +1073,7 @@ sub device_set_forming_std_close_check_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_forming_std_close_check_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_forming_std_close_check_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_configuration_underdoc
@@ -1084,7 +1084,7 @@ sub device_set_configuration_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_configuration_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_configuration_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_std_configuration_underdoc
@@ -1095,7 +1095,7 @@ sub device_set_std_configuration_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_std_configuration_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_std_configuration_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_fill_buffer_underdoc
@@ -1106,7 +1106,7 @@ sub device_set_fill_buffer_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_fill_buffer_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_fill_buffer_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_clear_string_underdoc
@@ -1117,7 +1117,7 @@ sub device_set_clear_string_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_clear_string_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_clear_string_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_clear_buffer_underdoc
@@ -1128,7 +1128,7 @@ sub device_set_clear_buffer_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_clear_buffer_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_clear_buffer_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_underdoc
@@ -1139,7 +1139,7 @@ sub device_set_print_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_general_configuration_underdoc
@@ -1150,7 +1150,7 @@ sub device_get_general_configuration_underdoc
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_general_configuration_underdoc(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_general_configuration_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_sell
@@ -1161,7 +1161,7 @@ sub device_set_sell
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_sell(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_sell(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_buy
@@ -1172,7 +1172,7 @@ sub device_set_buy
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_buy(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_buy(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_returns_sale
@@ -1183,7 +1183,7 @@ sub device_set_returns_sale
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_returns_sale(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_returns_sale(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_returns_purchases
@@ -1194,7 +1194,7 @@ sub device_set_returns_purchases
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_returns_purchases(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_returns_purchases(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_reversal
@@ -1205,7 +1205,7 @@ sub device_set_reversal
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_reversal(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_reversal(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_check_close
@@ -1216,7 +1216,7 @@ sub device_set_check_close
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_check_close(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_check_close(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_discount
@@ -1227,7 +1227,7 @@ sub device_set_discount
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_discount(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_discount(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_allowance
@@ -1238,7 +1238,7 @@ sub device_set_allowance
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_allowance(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_allowance(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_check_cancellation
@@ -1249,7 +1249,7 @@ sub device_set_check_cancellation
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_check_cancellation(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_check_cancellation(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_check_subtotal
@@ -1260,7 +1260,7 @@ sub device_get_check_subtotal
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_check_subtotal(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_check_subtotal(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_reversal_discount
@@ -1271,7 +1271,7 @@ sub device_set_reversal_discount
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_reversal_discount(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_reversal_discount(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_reversal_allowance
@@ -1282,7 +1282,7 @@ sub device_set_reversal_allowance
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_reversal_allowance(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_reversal_allowance(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_document_repeat
@@ -1293,7 +1293,7 @@ sub device_get_document_repeat
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_document_repeat(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_document_repeat(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_check_open
@@ -1304,7 +1304,7 @@ sub device_set_check_open
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_check_open(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_check_open(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_continue
@@ -1315,7 +1315,7 @@ sub device_set_print_continue
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_continue(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_continue(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_load_graphics
@@ -1326,7 +1326,7 @@ sub device_set_load_graphics
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_load_graphics(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_load_graphics(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_graphics
@@ -1337,7 +1337,7 @@ sub device_set_print_graphics
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_graphics(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_graphics(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_barcode
@@ -1348,7 +1348,7 @@ sub device_set_print_barcode
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_barcode(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_barcode(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_load_ext_graphics
@@ -1359,7 +1359,7 @@ sub device_set_load_ext_graphics
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_load_ext_graphics(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_load_ext_graphics(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_ext_graphics
@@ -1370,7 +1370,7 @@ sub device_set_print_ext_graphics
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_ext_graphics(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_ext_graphics(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_line
@@ -1381,7 +1381,7 @@ sub device_set_print_line
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_line(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_line(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_daily_report_damp_buffer
@@ -1392,7 +1392,7 @@ sub device_set_daily_report_damp_buffer
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_daily_report_damp_buffer(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_daily_report_damp_buffer(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_daily_report_buffer
@@ -1403,7 +1403,7 @@ sub device_set_print_daily_report_buffer
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_daily_report_buffer(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_daily_report_buffer(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_rowcount_printbuf
@@ -1414,7 +1414,7 @@ sub device_get_rowcount_printbuf
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_rowcount_printbuf(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_rowcount_printbuf(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_string_printbuf
@@ -1425,7 +1425,7 @@ sub device_get_string_printbuf
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_string_printbuf(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_string_printbuf(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_clear_printbuf
@@ -1436,7 +1436,7 @@ sub device_set_clear_printbuf
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_clear_printbuf(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_clear_printbuf(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_fr_ibm_status_long
@@ -1447,7 +1447,7 @@ sub device_get_fr_ibm_status_long
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_fr_ibm_status_long(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_fr_ibm_status_long(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_fr_ibm_status
@@ -1458,7 +1458,7 @@ sub device_get_fr_ibm_status
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_fr_ibm_status(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_fr_ibm_status(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_open_nonfiscal_document
@@ -1469,7 +1469,7 @@ sub device_set_open_nonfiscal_document
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_open_nonfiscal_document(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_open_nonfiscal_document(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_close_nonfiscal_document
@@ -1480,7 +1480,7 @@ sub device_set_close_nonfiscal_document
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_close_nonfiscal_document(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_close_nonfiscal_document(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_props
@@ -1491,7 +1491,7 @@ sub device_set_print_props
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_print_props(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_print_props(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_state_bill_acceptor
@@ -1502,7 +1502,7 @@ sub device_get_state_bill_acceptor
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_state_bill_acceptor(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_state_bill_acceptor(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_registers_bill_acceptor
@@ -1513,7 +1513,7 @@ sub device_get_registers_bill_acceptor
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_registers_bill_acceptor(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_registers_bill_acceptor(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_report_bill_acceptor
@@ -1524,7 +1524,7 @@ sub device_get_report_bill_acceptor
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_report_bill_acceptor(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_report_bill_acceptor(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_operational_report_ni
@@ -1535,7 +1535,7 @@ sub device_get_operational_report_ni
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_operational_report_ni(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_operational_report_ni(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_flap_control
@@ -1546,7 +1546,7 @@ sub device_set_flap_control
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_flap_control(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_flap_control(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_check_getout
@@ -1557,7 +1557,7 @@ sub device_set_check_getout
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_check_getout(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_check_getout(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_password_cto
@@ -1568,7 +1568,7 @@ sub device_set_password_cto
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_password_cto(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_password_cto(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_type
@@ -1579,7 +1579,7 @@ sub device_get_type
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_device_type(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->get_device_type(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_extdev_command
@@ -1590,7 +1590,7 @@ sub device_set_extdev_command
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->set_extdev_command(@_) : { ERROR_CODE => -1 };
+	$self->{DEVICE}->set_extdev_command(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub service_shutdown
