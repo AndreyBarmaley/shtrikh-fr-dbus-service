@@ -12,6 +12,10 @@ device_is_online
 params: none
 return: bool
 
+device_set_timeout_ms
+params: timeout ms, int32
+return: none
+
 # 2. device command:
 
 command: 0x01

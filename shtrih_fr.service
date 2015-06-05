@@ -142,6 +142,7 @@ $dbus_object->{FLOG} = $logfile;
 # define signals and methods
 dbus_signal("service_shutdown", []);
 dbus_method("device_is_online", [], ["bool"]);
+dbus_method("device_set_timeout_ms", ["int32"], []);
 #
 dbus_method("device_get_dump", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_data", ["int32"], [["dict", "string", "string"]]);
@@ -360,6 +361,16 @@ sub device_is_online
     }
 
     return 0;
+}
+
+sub device_set_timeout_ms
+{
+    my ($self, $timeout_ms, undef) = @_;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . $timeout_ms . "]");
+
+    $self->{DEVICE}->set_timeout_ms($timeout_ms);
 }
 
 sub device_get_error

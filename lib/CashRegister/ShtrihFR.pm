@@ -197,7 +197,7 @@ sub new
 sub set_timeout_ms
 {
     my ($self, $val, undef) = @_;
-    $self->{TIMEOUT} = $val;
+    $self->{TIMEOUT} = $val * 1000;
 }
 
 sub set_encode_fromto
