@@ -24,7 +24,7 @@ use lib $FindBin::Bin . '/lib';
 use CashRegister::ShtrihFR;
 use POSIX qw(strftime);
 
-my $version = "20150427";
+my $version = "20150604";
 my @ports = ( glob("/dev/ttyS*"), glob("/dev/ttyUSB*") );
 
 my $str_dbus_service = "ru.shtrih_m.fr";
@@ -329,6 +329,18 @@ sub syslog
 
 ### implemented methods ##################################################################################
 
+sub service_shutdown
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    unlink($pidfile);
+
+    exit 0;
+}
+
 sub device_is_online
 {
     my $self = shift;
@@ -342,8 +354,9 @@ sub device_is_online
 
     if($self->{DEVICE})
     {
-	return 1 if($self->{DEVICE}->is_online());
-	$self->syslog("error", "device is offline");
+        return 1 if($self->{DEVICE}->is_online());
+        $self->syslog("error", "device is offline", ", port: ", $self->{DEVICE}->{PORT});
+        $self->service_shutdown();
     }
 
     return 0;
@@ -1591,16 +1604,4 @@ sub device_set_extdev_command
 
     return $self->device_is_online() ?
 	$self->{DEVICE}->set_extdev_command(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
-}
-
-sub service_shutdown
-{
-    my $self = shift;
-
-    my ($package, $filename, $line, $subroutine, undef) = caller(0);
-    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
-
-    unlink($pidfile);
-
-    exit 0;
 }

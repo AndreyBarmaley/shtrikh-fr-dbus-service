@@ -695,8 +695,8 @@ return: dict["string", "string"]
 command: 0x80
 call:   device_set_sell
 params: password, int32
-params: quality, string (big int)
-params: price, string (big int)
+params: quantity, string (big int)
+params: amount, string (big int)
 params: department, int32
 params: tax 1, int32
 params: tax 2, int32
@@ -708,8 +708,8 @@ return: dict["string", "string"]
 command: 0x81
 call:   device_set_buy
 params: password, int32
-params: quality, string (big int)
-params: price, string (big int)
+params: quantity, string (big int)
+params: amount, string (big int)
 params: department, int32
 params: tax 1, int32
 params: tax 2, int32
@@ -721,8 +721,8 @@ return: dict["string", "string"]
 command: 0x82
 call:   device_set_returns_sale
 params: password, int32
-params: quality, string (big int)
-params: price, string (big int)
+params: quantity, string (big int)
+params: amount, string (big int)
 params: department, int32
 params: tax 1, int32
 params: tax 2, int32
@@ -734,8 +734,8 @@ return: dict["string", "string"]
 command: 0x83
 call:   device_set_returns_purchases
 params: password, int32
-params: quality, string (big int)
-params: price, string (big int)
+params: quantity, string (big int)
+params: amount, string (big int)
 params: department, int32
 params: tax 1, int32
 params: tax 2, int32
@@ -747,8 +747,8 @@ return: dict["string", "string"]
 command: 0x84
 call:   device_set_reversal
 params: password, int32
-params: quality, string (big int)
-params: price, string (big int)
+params: quantity, string (big int)
+params: amount, string (big int)
 params: department, int32
 params: tax 1, int32
 params: tax 2, int32

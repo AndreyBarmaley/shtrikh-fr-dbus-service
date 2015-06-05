@@ -18,7 +18,7 @@ use strict;
 
 use constant
 {
-    MY_DRIVER_VERSION => 20150513,
+    MY_DRIVER_VERSION => 20150604,
     FR_PROTOCOL_VERSION	=> 1.12
 };
 
@@ -187,9 +187,31 @@ sub new
     $root->{ERROR_MESSAGE} = "";
     $root->{MESSAGE} = new CashRegister::ShtrihFR::Messages::Russian();
     $root->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $root->{ENCODE_FROM} = "utf8";
+    $root->{ENCODE_TO} = "cp1251";
 
     bless($root);
     return $root;
+}
+
+sub set_timeout_ms
+{
+    my ($self, $val, undef) = @_;
+    $self->{TIMEOUT} = $val;
+}
+
+sub set_encode_fromto
+{
+    my ($self, $from, $to, undef) = @_;
+    $self->{ENCODE_FROM} = $from;
+    $self->{ENCODE_TO} = $to;
+}
+
+sub encode_string
+{
+    my ($self, $text, undef) = @_;
+    Encode::from_to($text, $self->{ENCODE_FROM}, $self->{ENCODE_TO});
+    return $text;
 }
 
 sub find_device
@@ -197,13 +219,13 @@ sub find_device
     my ($class, @devices) = @_;
     my @speeds = ( 2400, 4800, 9600, 19200, 38400, 57600, 115200 );
 
-    foreach my $file ( @devices )
+    foreach my $port ( @devices )
     {
-	if(-r $file && -w $file)
+	if(-r $port && -w $port)
 	{
 	    foreach my $speed ( @speeds )
 	    {
-		my $device = CashRegister::ShtrihFR->new($file, $speed);
+		my $device = CashRegister::ShtrihFR->new($port, $speed);
 		last unless($device);
 		return $device if($device->is_online());
 	    }
@@ -538,8 +560,7 @@ sub get_device_status
 sub set_print_bold_string
 {
     my ($self, $pass, $flag, $str, $wait, undef) = @_;
-    Encode::from_to($str, "utf8", "cp1251");
-    my $buf = pack_stx(26, SET_PRINT_BOLD_STRING, "VCA20", $pass, $flag, $str);
+    my $buf = pack_stx(26, SET_PRINT_BOLD_STRING, "VCA20", $pass, $flag, $self->encode_string($str));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -703,8 +724,7 @@ sub set_technical_zero
 sub set_print_string
 {
     my ($self, $pass, $flag, $text, $wait, undef) = @_;
-    Encode::from_to($text, "utf8", "cp1251");
-    my $buf = pack_stx(46, SET_PRINT_STRING, "VCA40", $pass, $flag, $text);
+    my $buf = pack_stx(46, SET_PRINT_STRING, "VCA40", $pass, $flag, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -732,8 +752,7 @@ sub set_print_string
 sub set_print_header
 {
     my ($self, $pass, $docname, $docnum, $wait, undef) = @_;
-    Encode::from_to($docname, "utf8", "cp1251");
-    my $buf = pack_stx(37, SET_PRINT_HEADER, "VA30v", $pass, $docname, $docnum);
+    my $buf = pack_stx(37, SET_PRINT_HEADER, "VA30v", $pass, $self->encode_string($docname), $docnum);
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1258,7 +1277,7 @@ sub get_structure_table
 	    if($buf)
 	    {
 		my ($name, $colnum, $fieldnum, undef) = unpack("a40vC", $buf);
-		$res->{TABLE_NAME} = Encode::decode("cp1251", $name);
+		$res->{TABLE_NAME} = Encode::decode($self->{ENCODE_TO}, $name);
 		$res->{COLUMN_COUNT} = $colnum;
 		$res->{FIELD_COUNT} = $fieldnum;
 	    }
@@ -1287,7 +1306,7 @@ sub get_structure_field
 	    {
 		my ($name, $type, $count, $last, undef) = unpack("a40CCa*", $buf);
 
-		$res->{TABLE_NAME} = Encode::decode("cp1251", $name);
+		$res->{TABLE_NAME} = Encode::decode($self->{ENCODE_TO}, $name);
 		$res->{FIELD_TYPE} = $type;
 		$res->{FIELD_SIZE} = $count;
 		$res->{FIELD_MIN_VALUE} = get_hexstr_from_binary_le(substr($last, 0, $count));
@@ -1302,8 +1321,7 @@ sub get_structure_field
 sub set_print_font_string
 {
     my ($self, $pass, $flag, $fontnum, $text, $wait, undef) = @_;
-    Encode::from_to($text, "utf8", "cp1251");
-    my $buf = pack_stx(47, SET_PRINT_FONT_STRING, "VCCA40", $pass, $flag, $fontnum, $text);
+    my $buf = pack_stx(47, SET_PRINT_FONT_STRING, "VCCA40", $pass, $flag, $fontnum, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -1933,14 +1951,12 @@ sub set_forming_operation_underdoc
 	$offset_field_str, $offset_field_mul, $offset_field_sum, $offset_field_dep,
 	$number_string_pd, $amount, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    Encode::from_to($text, "utf8", "cp1251");
-
     my $buf = pack_stx(82, SET_FORMING_OPERATION_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCCCa5a5CCCCCA40", $pass,
 	$number_format, $string_count, $string_number, $string_number_mul, $string_number_sum, $string_number_dep,
 	$font_number_str, $font_number_count, $font_number_mul, $font_number_price, $font_number_sum, $font_number_dep,
 	$count_sym_field_str, $count_sym_field_count, $count_sym_field_price, $count_sym_field_sum, $count_sym_field_dep,
 	$offset_field_str, $offset_field_mul, $offset_field_sum, $offset_field_dep,
-	$number_string_pd, get_le_bigint5_from_string($amount), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
+	$number_string_pd, get_le_bigint5_from_string($amount), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
     my $res = ();
 
@@ -1973,10 +1989,8 @@ sub set_forming_standard_operation_underdoc
     my ($self, $pass, 
 	$number_string_pd, $amount, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    Encode::from_to($text, "utf8", "cp1251");
-
     my $buf = pack_stx(61, SET_FORMING_STD_OPERATION_UNDERDOC, "VCa5a5CCCCCA40", $pass,
-	$number_string_pd, get_le_bigint5_from_string($amount), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
+	$number_string_pd, get_le_bigint5_from_string($amount), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
     my $res = ();
 
@@ -2009,12 +2023,10 @@ sub set_forming_discount_underdoc
 	$count_sym_field_str, $count_sym_field_sum, $offset_field_str, $offset_field_name, $offset_field_sum, $operation_type, $number_string_pd,
 	$amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    Encode::from_to($text, "utf8", "cp1251");
-
     my $buf = pack_stx(68, SET_FORMING_DISCOUNT_UNDERDOC, "VCCCCCCCCCCCCCCa5CCCCA40", $pass,
 	$string_count, $string_number_str, $string_number_name, $string_number_sum, $font_number_str, $font_number_name, $font_number_sum,
 	$count_sym_field_str, $count_sym_field_sum, $offset_field_str, $offset_field_name, $offset_field_sum, $operation_type, $number_string_pd,
-	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
+	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
     my $res = ();
 
@@ -2046,10 +2058,8 @@ sub set_forming_std_discount_underdoc
     my ($self, $pass, $operation_type, $string_number_pd,
 	$amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    Encode::from_to($text, "utf8", "cp1251");
-
     my $buf = pack_stx(56, SET_FORMING_STD_DISCOUNT_UNDERDOC, "VCCa5CCCCA40", $pass,
-	$operation_type, $string_number_pd, get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
+	$operation_type, $string_number_pd, get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
     my $res = ();
 
@@ -2107,8 +2117,6 @@ sub set_forming_close_check_underdoc
 	$offset_field_total, $offset_field_sum_accrual_discount, $offset_field_discount_xx, $offset_field_sum_discount,
 	$number_string_pd, $amount, $amount_type2, $amount_type3, $amount_type4, $discout_on_check, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    Encode::from_to($text, "utf8", "cp1251");
-
     my $buf = pack_stx(182, SET_FORMING_CLOSE_CHECK_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCa5a5a5a5vCCCCA40", $pass,
 	$string_count, $string_number_amount, $string_number_str, $string_number_cash,
 	$string_number_payment_type2, $string_number_payment_type3, $string_number_payment_type4, $string_number_short_change,
@@ -2137,7 +2145,7 @@ sub set_forming_close_check_underdoc
 	$offset_field_tax_name_g, $offset_field_tax_return_g, $offset_field_tax_rate_g, $offset_field_tax_sum_g,
 	$offset_field_total, $offset_field_sum_accrual_discount, $offset_field_discount_xx, $offset_field_sum_discount, $number_string_pd,
 	get_le_bigint5_from_string($amount), get_le_bigint5_from_string($amount_type2), get_le_bigint5_from_string($amount_type3), get_le_bigint5_from_string($amount_type4),
-	get_binary_discout_check($discout_on_check), $tax1, $tax2, $tax3, $tax4, $text);
+	get_binary_discout_check($discout_on_check), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
     my $res = ();
 
@@ -2171,11 +2179,9 @@ sub set_forming_std_close_check_underdoc
     my ($self, $pass, $number_string_pd, $amount, $amount_type2, $amount_type3, $amount_type4,
 	$discout_on_check, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    Encode::from_to($text, "utf8", "cp1251");
-
     my $buf = pack_stx(72, SET_FORMING_STD_CLOSE_CHECK_UNDERDOC, "VCa5a5a5a5vCCCCA40", $pass, $number_string_pd,
 	get_le_bigint5_from_string($amount), get_le_bigint5_from_string($amount_type2), get_le_bigint5_from_string($amount_type3), get_le_bigint5_from_string($amount_type4),
-	get_binary_discout_check($discout_on_check), $tax1, $tax2, $tax3, $tax4, $text);
+	get_binary_discout_check($discout_on_check), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
     my $res = ();
 
@@ -2396,13 +2402,11 @@ sub get_general_configuration_underdoc
 
 sub set_sell
 {
-    # quality, price is big int string
-    my ($self, $pass, $quality, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-
-    Encode::from_to($text, "utf8", "cp1251");
+    # quantity, amount is big int string
+    my ($self, $pass, $quantity, $amount, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
     my $buf = pack_stx(60, SET_SELL, "Va5a5CCCCCA40", $pass,
-	get_le_bigint5_from_string($quality), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
+	get_le_bigint5_from_string($quantity), get_le_bigint5_from_string($amount), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2428,13 +2432,11 @@ sub set_sell
 
 sub set_buy
 {
-    # quality, price is big int string
-    my ($self, $pass, $quality, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-
-    Encode::from_to($text, "utf8", "cp1251");
+    # quantity, amount is big int string
+    my ($self, $pass, $quantity, $amount, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
     my $buf = pack_stx(60, SET_BUY, "Va5a5CCCCCA40", $pass,
-	get_le_bigint5_from_string($quality), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
+	get_le_bigint5_from_string($quantity), get_le_bigint5_from_string($amount), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2460,13 +2462,11 @@ sub set_buy
 
 sub set_returns_sale
 {
-    # quality, price is big int string
-    my ($self, $pass, $quality, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-
-    Encode::from_to($text, "utf8", "cp1251");
+    # quantity, amount is big int string
+    my ($self, $pass, $quantity, $amount, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
     my $buf = pack_stx(60, SET_RETURNS_SALE, "Va5a5CCCCCA40", $pass,
-	get_le_bigint5_from_string($quality), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
+	get_le_bigint5_from_string($quantity), get_le_bigint5_from_string($amount), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2492,13 +2492,11 @@ sub set_returns_sale
 
 sub set_returns_purchases
 {
-    # quality, price is big int string
-    my ($self, $pass, $quality, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-
-    Encode::from_to($text, "utf8", "cp1251");
+    # quantity, amount is big int string
+    my ($self, $pass, $quantity, $amount, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
     my $buf = pack_stx(60, SET_RETURNS_PURCHASES, "Va5a5CCCCCA40", $pass,
-	get_le_bigint5_from_string($quality), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
+	get_le_bigint5_from_string($quantity), get_le_bigint5_from_string($amount), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2524,13 +2522,11 @@ sub set_returns_purchases
 
 sub set_reversal
 {
-    # quality, price is big int string
-    my ($self, $pass, $quality, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
-
-    Encode::from_to($text, "utf8", "cp1251");
+    # quantity, amount is big int string
+    my ($self, $pass, $quantity, $amount, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
     my $buf = pack_stx(60, SET_REVERSAL, "Va5a5CCCCCA40", $pass,
-	get_le_bigint5_from_string($quality), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $text);
+	get_le_bigint5_from_string($quantity), get_le_bigint5_from_string($amount), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2559,11 +2555,9 @@ sub set_check_close
     # cash_sum, sum_type2, sum_type3, sum_type4 is big int string
     my ($self, $pass, $cash_sum, $sum_type2, $sum_type3, $sum_type4, $discount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    Encode::from_to($text, "utf8", "cp1251");
-
     my $buf = pack_stx(71, SET_CHECK_CLOSE, "Va5a5a5a5vCCCCA40", $pass,
 	get_le_bigint5_from_string($cash_sum), get_le_bigint5_from_string($sum_type2), get_le_bigint5_from_string($sum_type3), get_le_bigint5_from_string($sum_type4),
-	get_binary_discout_check($discount), $tax1, $tax2, $tax3, $tax4, $text);
+	get_binary_discout_check($discount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2593,10 +2587,8 @@ sub set_discount
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    Encode::from_to($text, "utf8", "cp1251");
-
     my $buf = pack_stx(54, SET_DISCOUT, "Va5CCCCA40", $pass,
-	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
+	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2625,10 +2617,8 @@ sub set_allowance
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    Encode::from_to($text, "utf8", "cp1251");
-
     my $buf = pack_stx(54, SET_ALLOWANCE, "Va5CCCCA40", $pass,
-	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
+	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2712,10 +2702,8 @@ sub set_reversal_discount
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    Encode::from_to($text, "utf8", "cp1251");
-
     my $buf = pack_stx(54, SET_REVERSAL_DISCOUNT, "Va5CCCCA40", $pass,
-	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
+	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -2744,10 +2732,8 @@ sub set_reversal_allowance
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    Encode::from_to($text, "utf8", "cp1251");
-
     my $buf = pack_stx(54, SET_REVERSAL_ALLOWANCE, "Va5CCCCA40", $pass,
-	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $text);
+	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -3298,8 +3284,7 @@ sub set_close_nonfiscal_document
 sub set_print_props
 {
     my ($self, $pass, $propnum, $value, $wait, undef) = @_;
-    Encode::from_to($value, "utf8", "cp1251");
-    my $buf = pack_stx(6 + length($value), SET_PRINT_PROPS, "VCA*", $pass, $propnum, $value);
+    my $buf = pack_stx(6 + length($value), SET_PRINT_PROPS, "VCA*", $pass, $propnum, $self->encode_string($value));
     my $res = ();
 
     if($self->write_buf($buf))
@@ -3527,7 +3512,7 @@ sub get_device_type
 		$res->{SUBVERSION} = $subversion;
 		$res->{MODEL} = $model;
 		$res->{LANGUAGE} = $language;
-		$res->{NAME} = Encode::decode("cp1251", $name);
+		$res->{NAME} = Encode::decode($self->{ENCODE_TO}, $name);
 	    }
 	}
     }
