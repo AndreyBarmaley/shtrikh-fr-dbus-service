@@ -12,10 +12,6 @@ device_is_online
 params: none
 return: bool
 
-device_set_timeout_ms
-params: timeout ms, int32
-return: none
-
 # 2. device command:
 
 command: 0x01
@@ -79,7 +75,6 @@ return: dict["string", "string"]
 command: 0x14
 call:   device_set_communication_params
 params: password, int32
-params: portnum, int32
 params: bod, int32
 params: timeout, int32
 return: dict["string", "string"]
@@ -87,7 +82,6 @@ return: dict["string", "string"]
 command: 0x15
 call:   device_get_communication_params
 params: password, int32
-params: port number, int32
 return: dict["string", "string"]
 
 command: 0x16
@@ -267,7 +261,7 @@ params: wait, bool
 return: dict["string", "string"]
 
 command: 0x41
-call:   device_get_daily_report_with_damp
+call:   device_get_daily_report_with_dump
 params: password, int32
 params: wait, bool
 return: dict["string", "string"]

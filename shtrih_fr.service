@@ -12,6 +12,7 @@
 
 use strict;
 use utf8;
+use Logger::Syslog;
 
 use Net::DBus;
 use Net::DBus::Reactor;
@@ -24,7 +25,7 @@ use lib $FindBin::Bin . '/lib';
 use CashRegister::ShtrihFR;
 use POSIX qw(strftime);
 
-my $version = "20150604";
+my $version = "20151009";
 my @ports = ( glob("/dev/ttyS*"), glob("/dev/ttyUSB*") );
 
 my $str_dbus_service = "ru.shtrih_m.fr";
@@ -33,11 +34,12 @@ my ($shortname, undef) = split(/\./, basename($0));
 my $logfile = $FindBin::Bin . "/log/" . $shortname . ".log";
 my $pidfile = $FindBin::Bin . "/run/" . $shortname . ".pid";
 my $param = "";
+my $verbose = 0;
 
 use Getopt::Std;
 
 my %params = ();
-getopts("d:p:l:s:h", \%params);
+getopts("d:p:l:s:hv", \%params);
 
 # set device
 @ports = split(",", $params{d}) if(exists $params{d});
@@ -50,6 +52,9 @@ $logfile = $params{l} if(exists $params{l});
 
 # set service name
 $str_dbus_service = $params{s} if(exists $params{s});
+
+# verbose
+$verbose = 1 if(exists $params{v});
 
 if(exists $params{h})
 {
@@ -142,7 +147,6 @@ $dbus_object->{FLOG} = $logfile;
 # define signals and methods
 dbus_signal("service_shutdown", []);
 dbus_method("device_is_online", [], ["bool"]);
-dbus_method("device_set_timeout_ms", ["int32"], []);
 #
 dbus_method("device_get_dump", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_data", ["int32"], [["dict", "string", "string"]]);
@@ -154,8 +158,8 @@ dbus_method("device_get_status", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_status_short", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_print_bold_string", ["int32", "int32", "string", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_set_beep", ["int32"], [["dict", "string", "string"]]);
-dbus_method("device_set_communication_params", ["int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
-dbus_method("device_get_communication_params", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_communication_params", ["int32", "int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_communication_params", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_technical_zero", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_print_string", ["int32", "int32", "string", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_set_print_header", ["int32", "string", "int32", "bool"], [["dict", "string", "string"]]);
@@ -183,7 +187,7 @@ dbus_method("device_get_structure_table", ["int32", "int32"], [["dict", "string"
 dbus_method("device_get_structure_field", ["int32", "int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_print_font_string", ["int32", "int32", "int32", "string", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_get_daily_report", ["int32", "bool"], [["dict", "string", "string"]]);
-dbus_method("device_get_daily_report_with_damp", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_get_daily_report_with_dump", ["int32", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_get_sections_report", ["int32", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_get_taxes_report", ["int32", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_set_adding_amount", ["int32", "string"], [["dict", "string", "string"]]);
@@ -271,24 +275,29 @@ dbus_method("device_set_extdev_command", ["int32", "int32", "string"], [["dict",
 $dbus_object->connect_to_signal("service_shutdown", sub { $dbus_object->service_shutdown(); } );
 
 # set signals
-$SIG{USR2} = sub { $dbus_object->create_lock(); };
-$SIG{INT} = $SIG{TERM} = sub { $dbus_object->service_shutdown(); };
+$SIG{USR2} = sub { $dbus_object->syslog("info", "signal: usr2"); $dbus_object->create_lock(); };
+$SIG{INT} = $SIG{TERM} = sub {$dbus_object->syslog("info", "signal: term");  $dbus_object->service_shutdown(); };
 
 $dbus_object->create_lock();
 
 # init log (set autoflush)
-$| = 1;
 
-if(open(STDOUT, '>>', $dbus_object->{FLOG}))
+unless($verbose)
 {
-    open(STDERR, '>>', $dbus_object->{FLOG});
+    $| = 1;
+
+    if(open(STDOUT, '>>', $dbus_object->{FLOG}))
+    {
+	open(STDERR, '>>', $dbus_object->{FLOG});
+    }
+    else
+    {
+	print "error write to ", $dbus_object->{FLOG}, " ($!)\n";
+	open(STDOUT, '>>', '/dev/null');
+	open(STDERR, '>>', '/dev/null');
+    }
 }
-else
-{
-    print "error write to ", $dbus_object->{FLOG}, " ($!)\n";
-    open(STDOUT, '>>', '/dev/null');
-    open(STDERR, '>>', '/dev/null');
-}
+
 $dbus_object->syslog("info", "service starting, version: ", $version);
 
 if($dbus_object->{DEVICE})
@@ -300,9 +309,8 @@ else
     $dbus_object->syslog("error", "device not found: ", join(", ", @ports));
 }
 
-my $reactor = Net::DBus::Reactor->main();
-$reactor->run();
-
+$dbus_object->{REACTOR} = Net::DBus::Reactor->main();
+$dbus_object->{REACTOR}->run();
 $dbus_object->service_shutdown();
 exit 0;
 
@@ -338,7 +346,7 @@ sub service_shutdown
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     unlink($pidfile);
-
+    $self->{REACTOR}->shutdown();
     exit 0;
 }
 
@@ -350,7 +358,14 @@ sub device_is_online
     unless($self->{DEVICE})
     {
 	$self->{DEVICE} = CashRegister::ShtrihFR->find_device(@ports);
-	$self->syslog("info", "device found: ", $self->{DEVICE}->{PORT}, ", speed: ", $self->{DEVICE}->{SPEED}) if($self->{DEVICE});
+	if($self->{DEVICE})
+	{
+	    $self->syslog("info", "device found: ", $self->{DEVICE}->{PORT}, ", speed: ", $self->{DEVICE}->{SPEED});
+	}
+	else
+	{
+	    $self->syslog("error", "device not found: ", join(", ", @ports));
+	}
     }
 
     if($self->{DEVICE})
@@ -361,16 +376,6 @@ sub device_is_online
     }
 
     return 0;
-}
-
-sub device_set_timeout_ms
-{
-    my ($self, $timeout_ms, undef) = @_;
-
-    my ($package, $filename, $line, $subroutine, undef) = caller(0);
-    $self->syslog("debug", $subroutine, ", params: [" . $timeout_ms . "]");
-
-    $self->{DEVICE}->set_timeout_ms($timeout_ms);
 }
 
 sub device_get_error
@@ -814,7 +819,7 @@ sub device_get_daily_report
 	$self->{DEVICE}->get_daily_report(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
-sub device_get_daily_report_with_damp
+sub device_get_daily_report_with_dump
 {
     my $self = shift;
 
@@ -822,7 +827,7 @@ sub device_get_daily_report_with_damp
     $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
 
     return $self->device_is_online() ?
-	$self->{DEVICE}->get_daily_report_with_damp(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+	$self->{DEVICE}->get_daily_report_with_dump(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_sections_report

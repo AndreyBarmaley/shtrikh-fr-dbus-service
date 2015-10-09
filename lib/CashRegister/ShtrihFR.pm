@@ -10,7 +10,7 @@ package CashRegister::ShtrihFR;
 use CashRegister::ShtrihFR::Messages::Russian;
 use Device::SerialPort;
 use POSIX qw(strftime);
-use Time::HiRes qw(usleep);
+use Time::HiRes qw(usleep tv_interval gettimeofday);
 use Math::BigInt;
 use Encode;
 
@@ -18,7 +18,7 @@ use strict;
 
 use constant
 {
-    MY_DRIVER_VERSION => 20150604,
+    MY_DRIVER_VERSION => 20151009,
     FR_PROTOCOL_VERSION	=> 1.12
 };
 
@@ -151,6 +151,26 @@ use constant
     CMD_NAK     => 0x15,
 };
 
+sub stx
+{
+    return pack("C", CMD_STX);
+}
+
+sub enq
+{
+    return pack("C", CMD_ENQ);
+}
+
+sub ack
+{
+    return pack("C", CMD_ACK);
+}
+
+sub nak
+{
+    return pack("C", CMD_NAK);
+}
+
 sub new
 {
     my $root = {};
@@ -182,7 +202,7 @@ sub new
     $root->{DEBUG} = $debug;
     $root->{SPEED} = $speed;
     $root->{PORT} = $port;
-    $root->{TIMEOUT} = 150000; # 150 ms
+    $root->{TIMEOUT} = 100000; # 100 ms
     $root->{ERROR_CODE} = 0;
     $root->{ERROR_MESSAGE} = "";
     $root->{MESSAGE} = new CashRegister::ShtrihFR::Messages::Russian();
@@ -192,12 +212,6 @@ sub new
 
     bless($root);
     return $root;
-}
-
-sub set_timeout_ms
-{
-    my ($self, $val, undef) = @_;
-    $self->{TIMEOUT} = $val * 1000;
 }
 
 sub set_encode_fromto
@@ -225,9 +239,13 @@ sub find_device
 	{
 	    foreach my $speed ( @speeds )
 	    {
-		my $device = CashRegister::ShtrihFR->new($port, $speed);
+		my $device = CashRegister::ShtrihFR->new($port, $speed, 0);
 		last unless($device);
-		return $device if($device->is_online());
+		if($device->is_online())
+		{
+		    $device->{DEBUG} = 1;
+		    return $device;
+		}
 	    }
 	}
     }
@@ -268,10 +286,17 @@ sub get_message_fp_flags
 sub is_online
 {
     my $self = shift;
+    $self->wait_default();
+    $self->wait_default();
 
-    if($self->{OBJ}->write(enq()))
+    if($self->send_enq())
     {
-	return nak() eq $self->read_byte();
+	my $res = $self->read_byte($self->{TIMEOUT} * 2);
+	return 1 if(nak() eq $res);
+
+	$self->{ERROR_CODE} = 255;
+	$self->{ERROR_MESSAGE} = "invalid nak: " . get_hexstr2(ord($res));
+	warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
     }
 
     return 0;
@@ -281,7 +306,7 @@ sub printing_wait
 {
     my ($self, $pass, undef) = @_;
 
-    usleep($self->{TIMEOUT} * 2);
+    $self->wait_default();
 
     if($self->is_online())
     {
@@ -291,7 +316,7 @@ sub printing_wait
 
 	    if($res->{FR_SUBMODE} == 5 || $res->{FR_SUBMODE} == 4)
 	    {
-		usleep($self->{TIMEOUT} * 2);
+		$self->wait_default();
 	    }
 	    else
 	    {
@@ -305,24 +330,18 @@ sub printing_wait
 sub get_dump
 {
     my ($self, $pass, $subsystem, undef) = @_;
-    my $buf = pack_stx(6, GET_DUMP, "VC", $pass, $subsystem);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, GET_DUMP, "VC", $pass, $subsystem);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($count, undef) = unpack("C", $buf);
-		$res->{BLOCK_COUNT} = $count;
-	    }
-	}
+	my ($count, undef) = unpack("C", $buf);
+	$res->{BLOCK_COUNT} = $count;
     }
 
     return $res;
@@ -331,27 +350,21 @@ sub get_dump
 sub get_data
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_DATA, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_DATA, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($subsystem, $blocknum, $data) = unpack("Cva32", $buf);
 
-	    if($buf)
-	    {
-		my ($subsystem, $blocknum, $data) = unpack("Cva32", $buf);
-
-		$res->{SUBSYSTEM} = $subsystem;
-		$res->{BLOCK_NUMBER} = $blocknum;
-		$res->{DATA} = get_hexdump($data);
-	    }
-	}
+	$res->{SUBSYSTEM} = $subsystem;
+	$res->{BLOCK_NUMBER} = $blocknum;
+	$res->{DATA} = get_hexdump($data);
     }
 
     return $res;
@@ -360,20 +373,13 @@ sub get_data
 sub set_break
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_BREAK, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_BREAK, "V", $pass);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -383,28 +389,22 @@ sub set_fiscalization_long_rnm
     # rnm is 7 byte: "00000000000000"
     # inn is 6 byte: "000000000000"
     my ($self, $pass_old, $pass_new, $rnm, $inn, undef) = @_;
-    my $buf = pack_stx(22, SET_FISCALIZATION_LONG_RNM, "VV(H2)7(H2)6", $pass_old, $pass_new, unpack("(A2)7", $rnm), unpack("(A2)6", $inn));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(22, SET_FISCALIZATION_LONG_RNM, "VV(H2)7(H2)6", $pass_old, $pass_new, unpack("(A2)7", $rnm), unpack("(A2)6", $inn));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($fiscal_number, $fiscal_last, $last_tour, $date_day, $date_month, $date_year, undef) = unpack("CCvCCC", $buf);
 
-	    if($buf)
-	    {
-		my ($fiscal_number, $fiscal_last, $last_tour, $date_day, $date_month, $date_year, undef) = unpack("CCvCCC", $buf);
-
-		$res->{FISCAL_NUMBER} = $fiscal_number;
-		$res->{FISCAL_LAST} = $fiscal_last;
-		$res->{FISCAL_DATE} = format_date(2000 + $date_year, $date_month, $date_day);
-		$res->{LAST_TOUR_NUMBER} = $last_tour;
-	    }
-	}
+	$res->{FISCAL_NUMBER} = $fiscal_number;
+	$res->{FISCAL_LAST} = $fiscal_last;
+	$res->{FISCAL_DATE} = format_date(2000 + $date_year, $date_month, $date_day);
+	$res->{LAST_TOUR_NUMBER} = $last_tour;
     }
 
     return $res;
@@ -414,20 +414,13 @@ sub set_long_serial_number
 {
     # serial is 7 byte: "00000000000000"
     my ($self, $pass, $serial, undef) = @_;
-    my $buf = pack_stx(12, SET_LONG_SERIAL_NUMBER, "V(H2)7", $pass, unpack("(A2)7", $serial));
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(12, SET_LONG_SERIAL_NUMBER, "V(H2)7", $pass, unpack("(A2)7", $serial));
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -435,26 +428,20 @@ sub set_long_serial_number
 sub get_long_serial_number_rnm
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_LONG_SERIAL_NUMBER_RNM, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_LONG_SERIAL_NUMBER_RNM, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($num, $rnm, undef) = unpack("a7a7", $buf);
 
-	    if($buf)
-	    {
-		my ($num, $rnm, undef) = unpack("a7a7", $buf);
-
-		$res->{SERIAL_NUMBER} = get_hexnum_from_binary_le($num);
-		$res->{RNM_NUMBER} = get_hexnum_from_binary_le($rnm);
-	    }
-	}
+	$res->{SERIAL_NUMBER} = get_hexnum_from_binary_le($num);
+	$res->{RNM_NUMBER} = get_hexnum_from_binary_le($rnm);
     }
 
     return $res;
@@ -463,38 +450,32 @@ sub get_long_serial_number_rnm
 sub get_short_status
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_SHORT_STATUS, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_SHORT_STATUS, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, $flags, $mode, $submode, $count_lo, $battery,
+		$power, $err_fp, $err_eklz, $count_hi, $rez, undef) = unpack("CvCCCCCCCCC3", $buf);
 
-	    if($buf)
-	    {
-		my ($oper, $flags, $mode, $submode, $count_lo, $battery,
-			$power, $err_fp, $err_eklz, $count_hi, $rez, undef) = unpack("CvCCCCCCCCC3", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{FR_FLAGS} = $flags;
+	$res->{FR_MODE} = $mode;
+	$res->{FR_SUBMODE} = $submode;
+	$res->{TICKET_OPERATION_COUNT} = $count_hi << 8 | $count_lo;
+	$res->{POWER_MAIN} = $power;
+	$res->{POWER_BATTERY} = $battery;
+	$res->{ERROR_FP} = $err_fp;
+	$res->{ERROR_EKLZ} = $err_eklz;
 
-		$res->{OPERATOR} = $oper;
-		$res->{FR_FLAGS} = $flags;
-		$res->{FR_MODE} = $mode;
-		$res->{FR_SUBMODE} = $submode;
-		$res->{TICKET_OPERATION_COUNT} = $count_hi << 8 | $count_lo;
-		$res->{POWER_MAIN} = $power;
-		$res->{POWER_BATTERY} = $battery;
-		$res->{ERROR_FP} = $err_fp;
-		$res->{ERROR_EKLZ} = $err_eklz;
-
-		$res->{MESSAGE_FR_MODE} = $self->get_message_fr_mode($res->{FR_MODE});
-		$res->{MESSAGE_FR_SUBMODE} = $self->get_message_fr_submode($res->{FR_SUBMODE});
-		$res->{MESSAGE_FR_FLAGS} = join(', ', $self->get_message_fr_flags($res->{FR_FLAGS}));
-	    }
-	}
+	$res->{MESSAGE_FR_MODE} = $self->get_message_fr_mode($res->{FR_MODE});
+	$res->{MESSAGE_FR_SUBMODE} = $self->get_message_fr_submode($res->{FR_SUBMODE});
+	$res->{MESSAGE_FR_FLAGS} = join(', ', $self->get_message_fr_flags($res->{FR_FLAGS}));
     }
 
     return $res;
@@ -503,55 +484,49 @@ sub get_short_status
 sub get_device_status
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_DEVICE_STATUS, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_DEVICE_STATUS, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, $progfr_ver_hi, $progfr_ver_lo, $buildfr_ver, $datefr_day, $datefr_month, $datefr_year,
+		$hall_number, $cur_doc, $flagfr, $mode, $submode, $port,
+		$progfp_ver_lo, $progfp_ver_hi, $buildfp, $datefp_day, $datefp_month, $datefp_year,
+		$date_day, $date_month, $date_year, $time_hour, $time_min, $time_sec, $flag_fp, $serial,
+		$last_tour, $open_rec, $fiscal_number, $fiscal_last, $inn, undef) = unpack("CCCvCCCCvvCCCCCvCCCCCCCCCCVvvCCa6", $buf);
 
-	    if($buf)
-	    {
-		my ($oper, $progfr_ver_hi, $progfr_ver_lo, $buildfr_ver, $datefr_day, $datefr_month, $datefr_year,
-			$hall_number, $cur_doc, $flagfr, $mode, $submode, $port,
-			$progfp_ver_lo, $progfp_ver_hi, $buildfp, $datefp_day, $datefp_month, $datefp_year,
-			$date_day, $date_month, $date_year, $time_hour, $time_min, $time_sec, $flag_fp, $serial,
-			$last_tour, $open_rec, $fiscal_number, $fiscal_last, $inn, undef) = unpack("CCCvCCCCvvCCCCCvCCCCCCCCCCVvvCCa6", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{FR_PROG_VERSION} = join('.', $progfr_ver_hi, $progfr_ver_lo);
+	$res->{FR_BUILD_VERSION} = $buildfr_ver;
+	$res->{FR_DATE} = format_date(2000 + $datefr_year, $datefr_month, $datefr_day);
+	$res->{HALL_NUMBER} = $hall_number;
+	$res->{CURRENT_DOC_NUMBER} = $cur_doc;
+	$res->{FR_FLAGS} = $flagfr;
+	$res->{FR_MODE} = $mode;
+	$res->{FR_SUBMODE} = $submode;
+	$res->{FR_PORT} = $port;
+	$res->{FP_PROG_VERSION} = join('.', $progfp_ver_hi, $progfp_ver_lo);
+	$res->{FP_BUILD_VERSION} = $buildfp;
+	$res->{FP_DATE} = format_date(2000 + $datefp_year, $datefp_month, $datefp_day);
+	$res->{DATE} = format_date(2000 + $date_year, $date_month, $date_day);
+	$res->{TIME} = format_time($time_hour, $time_min, $time_sec);
+	$res->{FP_FLAGS} = $flag_fp;
+	$res->{SERIAL_NUMBER} = $serial;
+	$res->{LAST_TOUR_NUMBER} = $last_tour;
+	$res->{FP_OPEN_RECORDS} = $open_rec;
+	$res->{FISCAL_NUMBER} = $fiscal_number;
+	$res->{FISCAL_LAST} = $fiscal_last;
+	$res->{INN_NUMBER} = get_hexstr_from_binary_le($inn);
 
-		$res->{OPERATOR} = $oper;
-		$res->{FR_PROG_VERSION} = join('.', $progfr_ver_hi, $progfr_ver_lo);
-		$res->{FR_BUILD_VERSION} = $buildfr_ver;
-		$res->{FR_DATE} = format_date(2000 + $datefr_year, $datefr_month, $datefr_day);
-		$res->{HALL_NUMBER} = $hall_number;
-		$res->{CURRENT_DOC_NUMBER} = $cur_doc;
-		$res->{FR_FLAGS} = $flagfr;
-		$res->{FR_MODE} = $mode;
-		$res->{FR_SUBMODE} = $submode;
-		$res->{FR_PORT} = $port;
-		$res->{FP_PROG_VERSION} = join('.', $progfp_ver_hi, $progfp_ver_lo);
-		$res->{FP_BUILD_VERSION} = $buildfp;
-		$res->{FP_DATE} = format_date(2000 + $datefp_year, $datefp_month, $datefp_day);
-		$res->{DATE} = format_date(2000 + $date_year, $date_month, $date_day);
-		$res->{TIME} = format_time($time_hour, $time_min, $time_sec);
-		$res->{FP_FLAGS} = $flag_fp;
-		$res->{SERIAL_NUMBER} = $serial;
-		$res->{LAST_TOUR_NUMBER} = $last_tour;
-		$res->{FP_OPEN_RECORDS} = $open_rec;
-		$res->{FISCAL_NUMBER} = $fiscal_number;
-		$res->{FISCAL_LAST} = $fiscal_last;
-		$res->{INN_NUMBER} = get_hexstr_from_binary_le($inn);
-
-		$res->{MESSAGE_FR_MODE} = $self->get_message_fr_mode($res->{FR_MODE});
-		$res->{MESSAGE_SUBMODE} = $self->get_message_fr_submode($res->{FR_SUBMODE});
-		$res->{MESSAGE_FR_FLAGS} = join(', ', $self->get_message_fr_flags($res->{FR_FLAGS}));
-		$res->{MESSAGE_FP_FLAGS} = join(', ', $self->get_message_fp_flags($res->{FP_FLAGS}));
-	    }
-	}
+	$res->{MESSAGE_FR_MODE} = $self->get_message_fr_mode($res->{FR_MODE});
+	$res->{MESSAGE_SUBMODE} = $self->get_message_fr_submode($res->{FR_SUBMODE});
+	$res->{MESSAGE_FR_FLAGS} = join(', ', $self->get_message_fr_flags($res->{FR_FLAGS}));
+	$res->{MESSAGE_FP_FLAGS} = join(', ', $self->get_message_fp_flags($res->{FP_FLAGS}));
     }
 
     return $res;
@@ -560,27 +535,21 @@ sub get_device_status
 sub set_print_bold_string
 {
     my ($self, $pass, $flag, $str, $wait, undef) = @_;
-    my $buf = pack_stx(26, SET_PRINT_BOLD_STRING, "VCA20", $pass, $flag, $self->encode_string($str));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(26, SET_PRINT_BOLD_STRING, "VCA20", $pass, $flag, $self->encode_string($str));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -588,24 +557,18 @@ sub set_print_bold_string
 sub set_beep
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_BEEP, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_BEEP, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -613,7 +576,8 @@ sub set_beep
 
 sub set_communication_params
 {
-    my ($self, $pass, $portnum, $bod, $timeout, undef) = @_;
+    my ($self, $pass, $bod, $timeout, $portnum, undef) = @_;
+    $portnum = 0 unless($portnum);
 
     my @bods = (2400, 4800, 9600, 19200, 38400, 57600, 115200);
     my ($bod_index, undef) = grep { $bods[$_] eq $bod } 0 .. $#bods;
@@ -636,24 +600,16 @@ sub set_communication_params
 	$timeout = 100;
     }
 
-    my $buf = pack_stx(6, SET_RS232_PARAM, "VCCC", $pass, $portnum, $bod_index, $timeout);
-    my $res = ();
+    my $res = {};
+    my $buf = $self->send_cmd(8, SET_RS232_PARAM, "VCCC", $pass, $portnum, $bod_index, $timeout);
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    unless($res->{ERROR_CODE})
     {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    unless($res->{ERROR_CODE})
-	    {
-		$self->{TIMEOUT} = $timeout * 1000; # ms
-	    }
-	}
+	$self->{TIMEOUT} = $timeout * 1000; # ms
     }
 
     return $res;
@@ -662,39 +618,33 @@ sub set_communication_params
 sub get_communication_params
 {
     my ($self, $pass, $portnum, undef) = @_;
-    my $buf = pack_stx(6, GET_RS232_PARAM, "VC", $pass, $portnum);
-    my $res = ();
+    $portnum = 0 unless($portnum);
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, GET_RS232_PARAM, "VC", $pass, $portnum);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
+	my ($code, $timeout, undef) = unpack("CC", $buf);
+	my $bods = [ 2400, 4800, 9600, 19200, 38400, 57600, 115200 ];
+
+        $res->{SPEED} = $bods->[$code];
+
+	if(151 <= $timeout && $timeout <= 249)
 	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($code, $timeout, undef) = unpack("CC", $buf);
-		my $bods = [ 2400, 4800, 9600, 19200, 38400, 57600, 115200 ];
-
-	        $res->{SPEED} = $bods->[$code];
-		$res->{TIMEOUT} = $timeout;
-
-		if(151 <= $timeout && $timeout <= 249)
-		{
-		    $res->{TIMEOUT} = 300 + ($timeout - 151) * 150;
-		}
-		elsif(250 <= $timeout && $timeout <= 255)
-		{
-		    $res->{TIMEOUT} = 30000 + ($timeout - 250) * 15000;
-		}
-
-		# apply timeout
-		$self->{TIMEOUT} = $res->{TIMEOUT} * 1000; # ms
-	    }
+	    $timeout = 300 + ($timeout - 151) * 150;
 	}
+	elsif(250 <= $timeout && $timeout <= 255)
+	{
+	    $timeout = 30000 + ($timeout - 250) * 15000;
+	}
+
+	$res->{TIMEOUT} = $timeout;
+	$self->{TIMEOUT} = $timeout * 1000; # ms
     }
 
     return $res;
@@ -703,20 +653,13 @@ sub get_communication_params
 sub set_technical_zero
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(1, SET_TECHNICAL_ZERO, "");
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(1, SET_TECHNICAL_ZERO, "");
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -724,27 +667,21 @@ sub set_technical_zero
 sub set_print_string
 {
     my ($self, $pass, $flag, $text, $wait, undef) = @_;
-    my $buf = pack_stx(46, SET_PRINT_STRING, "VCA40", $pass, $flag, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(46, SET_PRINT_STRING, "VCA40", $pass, $flag, $self->encode_string($text));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -752,29 +689,23 @@ sub set_print_string
 sub set_print_header
 {
     my ($self, $pass, $docname, $docnum, $wait, undef) = @_;
-    my $buf = pack_stx(37, SET_PRINT_HEADER, "VA30v", $pass, $self->encode_string($docname), $docnum);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(37, SET_PRINT_HEADER, "VA30v", $pass, $self->encode_string($docname), $docnum);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, $through_doc, undef) = unpack("Cv", $buf);
 
-	    if($buf)
-	    {
-		my ($oper, $through_doc, undef) = unpack("Cv", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{THROUGH_DOC_NUMBER} = $through_doc;
 
-		$res->{OPERATOR} = $oper;
-		$res->{THROUGH_DOC_NUMBER} = $through_doc;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -782,24 +713,18 @@ sub set_print_header
 sub set_test_run
 {
     my ($self, $pass, $period, undef) = @_;
-    my $buf = pack_stx(6, SET_TEST_RUN, "VC", $pass, $period);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, SET_TEST_RUN, "VC", $pass, $period);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -808,25 +733,19 @@ sub set_test_run
 sub get_cache_register
 {
     my ($self, $pass, $regnum, undef) = @_;
-    my $buf = pack_stx(6, GET_CASHE_REGISTER, "VC", $pass, $regnum);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, GET_CASHE_REGISTER, "VC", $pass, $regnum);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, $value, undef) = unpack("Ca6", $buf);
-		$res->{OPERATOR} = $oper;
-		$res->{REGISTER} = get_hexnum_from_binary_le($value);
-	    }
-	}
+	my ($oper, $value, undef) = unpack("Ca6", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{REGISTER} = get_hexnum_from_binary_le($value);
     }
 
     return $res;
@@ -835,25 +754,19 @@ sub get_cache_register
 sub get_operational_register
 {
     my ($self, $pass, $regnum, undef) = @_;
-    my $buf = pack_stx(6, GET_OPERATIONAL_REGISTER, "VC", $pass, $regnum);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, GET_OPERATIONAL_REGISTER, "VC", $pass, $regnum);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, $value, undef) = unpack("Cv", $buf);
-		$res->{OPERATOR} = $oper;
-		$res->{REGISTER} = $value;
-	    }
-	}
+	my ($oper, $value, undef) = unpack("Cv", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{REGISTER} = $value;
     }
 
     return $res;
@@ -863,19 +776,13 @@ sub set_license
 {
     # license is 5 byte: "0000000000"
     my ($self, $pass, $license, undef) = @_;
-    my $buf = pack_stx(10, SET_LICENSE, "V(H2)5", $pass, unpack("(A2)5", $license));
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    my $res = {};
+    my $buf = $self->send_cmd(10, SET_LICENSE, "V(H2)5", $pass, unpack("(A2)5", $license));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -883,24 +790,18 @@ sub set_license
 sub get_license
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_LICENSE, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_LICENSE, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($license, undef) = unpack("a5", $buf);
-		$res->{LICENSE} = get_hexnum_from_binary_le($license);
-	    }
-	}
+	my ($license, undef) = unpack("a5", $buf);
+	$res->{LICENSE} = get_hexnum_from_binary_le($license);
     }
 
     return $res;
@@ -909,20 +810,13 @@ sub get_license
 sub set_write_table
 {
     my ($self, $pass, $table, $col, $field, $data, undef) = @_;
-    my $buf = pack_stx(9 + length($data), SET_WRITE_TABLE, "VCvCa*", $pass, $table, $col, $field, $data);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(9 + length($data), SET_WRITE_TABLE, "VCvCa*", $pass, $table, $col, $field, $data);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -930,24 +824,17 @@ sub set_write_table
 sub get_read_table
 {
     my ($self, $pass, $table, $col, $field, undef) = @_;
-    my $buf = pack_stx(9, GET_READ_TABLE, "VCvC", $pass, $table, $col, $field);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(9, GET_READ_TABLE, "VCvC", $pass, $table, $col, $field);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		$res->{VALUE} = get_hexdump($buf);
-	    }
-	}
+	$res->{VALUE} = get_hexdump($buf);
     }
 
     return $res;
@@ -956,20 +843,13 @@ sub get_read_table
 sub set_decimal_point
 {
     my ($self, $pass, $pos, undef) = @_;
-    my $buf = pack_stx(6, SET_DECIMAL_POINT, "VC", $pass, $pos);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(6, SET_DECIMAL_POINT, "VC", $pass, $pos);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -977,20 +857,13 @@ sub set_decimal_point
 sub set_current_time
 {
     my ($self, $pass, $hour, $min, $sec, undef) = @_;
-    my $buf = pack_stx(8, SET_CURRENT_TIME, "VCCC", $pass, $hour, $min, $sec);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(8, SET_CURRENT_TIME, "VCCC", $pass, $hour, $min, $sec);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -998,20 +871,13 @@ sub set_current_time
 sub set_current_date
 {
     my ($self, $pass, $year, $mon, $day, undef) = @_;
-    my $buf = pack_stx(8, SET_CURRENT_DATE, "VCCC", $pass, $day, $mon, $year);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(8, SET_CURRENT_DATE, "VCCC", $pass, $day, $mon, $year);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -1019,20 +885,13 @@ sub set_current_date
 sub set_date_confirm
 {
     my ($self, $pass, $year, $mon, $day, undef) = @_;
-    my $buf = pack_stx(8, SET_DATE_CONFIRM, "VCCC", $pass, $day, $mon, $year);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(8, SET_DATE_CONFIRM, "VCCC", $pass, $day, $mon, $year);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -1040,20 +899,13 @@ sub set_date_confirm
 sub set_init_tables
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_INIT_TABLES, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_INIT_TABLES, "V", $pass);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -1061,20 +913,13 @@ sub set_init_tables
 sub set_cut_check
 {
     my ($self, $pass, $type, undef) = @_;
-    my $buf = pack_stx(6, SET_CUT_CHECK, "VC", $pass, $type);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(6, SET_CUT_CHECK, "VC", $pass, $type);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -1082,27 +927,21 @@ sub set_cut_check
 sub get_font_params
 {
     my ($self, $pass, $fontnum, undef) = @_;
-    my $buf = pack_stx(6, GET_FONT_PARAMS, "VC", $pass, $fontnum);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, GET_FONT_PARAMS, "VC", $pass, $fontnum);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($area_width, $char_width, $char_height, $count, undef) = unpack("vCCC", $buf);
-		$res->{PRINT_AREA_WIDTH} = $area_width;
-		$res->{SYMBOL_WIDTH} = $char_width;
-		$res->{SYMBOL_HEIGHT} = $char_height;
-		$res->{FONT_COUNT} = $count;
-	    }
-	}
+	my ($area_width, $char_width, $char_height, $count, undef) = unpack("vCCC", $buf);
+	$res->{PRINT_AREA_WIDTH} = $area_width;
+	$res->{SYMBOL_WIDTH} = $char_width;
+	$res->{SYMBOL_HEIGHT} = $char_height;
+	$res->{FONT_COUNT} = $count;
     }
 
     return $res;
@@ -1111,20 +950,13 @@ sub get_font_params
 sub set_total_damping
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_TOTAL_DAMPING, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_TOTAL_DAMPING, "V", $pass);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -1132,24 +964,18 @@ sub set_total_damping
 sub set_open_money_box
 {
     my ($self, $pass, $boxnum, undef) = @_;
-    my $buf = pack_stx(6, SET_OPEN_MONEY_BOX, "VC", $pass, $boxnum);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, SET_OPEN_MONEY_BOX, "VC", $pass, $boxnum);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -1158,24 +984,18 @@ sub set_open_money_box
 sub set_scroll
 {
     my ($self, $pass, $flags, $rows, undef) = @_;
-    my $buf = pack_stx(7, SET_SCROLL, "VCC", $pass, $flags, $rows);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(7, SET_SCROLL, "VCC", $pass, $flags, $rows);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -1184,24 +1004,18 @@ sub set_scroll
 sub set_getout_backfilling_document
 {
     my ($self, $pass, $direct, undef) = @_;
-    my $buf = pack_stx(6, SET_GETOUT_BACKFILLING_DOC, "VC", $pass, $direct);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, SET_GETOUT_BACKFILLING_DOC, "VC", $pass, $direct);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -1210,24 +1024,18 @@ sub set_getout_backfilling_document
 sub set_break_test_run
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_BREAK_TEST_RUN, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_BREAK_TEST_RUN, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -1236,24 +1044,18 @@ sub set_break_test_run
 sub get_registers_values
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_REGISTERS_VALUES, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_REGISTERS_VALUES, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -1262,26 +1064,20 @@ sub get_registers_values
 sub get_structure_table
 {
     my ($self, $pass, $tabnum, undef) = @_;
-    my $buf = pack_stx(6, GET_STRUCTURE_TABLE, "VC", $pass, $tabnum);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, GET_STRUCTURE_TABLE, "VC", $pass, $tabnum);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($name, $colnum, $fieldnum, undef) = unpack("a40vC", $buf);
-		$res->{TABLE_NAME} = Encode::decode($self->{ENCODE_TO}, $name);
-		$res->{COLUMN_COUNT} = $colnum;
-		$res->{FIELD_COUNT} = $fieldnum;
-	    }
-	}
+	my ($name, $colnum, $fieldnum, undef) = unpack("a40vC", $buf);
+	$res->{TABLE_NAME} = Encode::decode($self->{ENCODE_TO}, $name);
+	$res->{COLUMN_COUNT} = $colnum;
+	$res->{FIELD_COUNT} = $fieldnum;
     }
 
     return $res;
@@ -1290,29 +1086,23 @@ sub get_structure_table
 sub get_structure_field
 {
     my ($self, $pass, $tabnum, $fieldnum, undef) = @_;
-    my $buf = pack_stx(7, GET_STRUCTURE_FIELD, "VCC", $pass, $tabnum, $fieldnum);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(7, GET_STRUCTURE_FIELD, "VCC", $pass, $tabnum, $fieldnum);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($name, $type, $count, $last, undef) = unpack("a40CCa*", $buf);
 
-	    if($buf)
-	    {
-		my ($name, $type, $count, $last, undef) = unpack("a40CCa*", $buf);
-
-		$res->{TABLE_NAME} = Encode::decode($self->{ENCODE_TO}, $name);
-		$res->{FIELD_TYPE} = $type;
-		$res->{FIELD_SIZE} = $count;
-		$res->{FIELD_MIN_VALUE} = get_hexstr_from_binary_le(substr($last, 0, $count));
-		$res->{FIELD_MAX_VALUE} = get_hexstr_from_binary_le(substr($last, $count, $count));
-	    }
-	}
+	$res->{TABLE_NAME} = Encode::decode($self->{ENCODE_TO}, $name);
+	$res->{FIELD_TYPE} = $type;
+	$res->{FIELD_SIZE} = $count;
+	$res->{FIELD_MIN_VALUE} = get_hexstr_from_binary_le(substr($last, 0, $count));
+	$res->{FIELD_MAX_VALUE} = get_hexstr_from_binary_le(substr($last, $count, $count));
     }
 
     return $res;
@@ -1321,27 +1111,21 @@ sub get_structure_field
 sub set_print_font_string
 {
     my ($self, $pass, $flag, $fontnum, $text, $wait, undef) = @_;
-    my $buf = pack_stx(47, SET_PRINT_FONT_STRING, "VCCA40", $pass, $flag, $fontnum, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(47, SET_PRINT_FONT_STRING, "VCCA40", $pass, $flag, $fontnum, $self->encode_string($text));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -1349,55 +1133,65 @@ sub set_print_font_string
 sub get_daily_report
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, GET_DAILY_REPORT, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_DAILY_REPORT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
 
-sub get_daily_report_with_damp
+sub get_daily_report
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, GET_DAILY_REPORT_DAMP, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_DAILY_REPORT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
 
-    $self->printing_wait($pass) if($wait);
+    return $res;
+}
+
+sub get_daily_report_with_dump
+{
+    my ($self, $pass, $wait, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_DAILY_REPORT_DAMP, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
+
+	$self->printing_wait($pass) if($wait);
+    }
 
     return $res;
 }
@@ -1405,27 +1199,21 @@ sub get_daily_report_with_damp
 sub get_sections_report
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, GET_SECTIONS_REPORT, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_SECTIONS_REPORT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
-    }
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
     $self->printing_wait($pass) if($wait);
+    }
 
     return $res;
 }
@@ -1433,27 +1221,21 @@ sub get_sections_report
 sub get_taxes_report
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, GET_TAXES_REPORT, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_TAXES_REPORT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -1462,25 +1244,19 @@ sub set_adding_amount
 {
     # amount is big int string
     my ($self, $pass, $amount, undef) = @_;
-    my $buf = pack_stx(10, SET_ADDING_AMOUNT, "Va5", $pass, get_le_bigint5_from_string($amount));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(10, SET_ADDING_AMOUNT, "Va5", $pass, get_le_bigint5_from_string($amount));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, $through_doc, undef) = unpack("Cv", $buf);
-		$res->{OPERATOR} = $oper;
-		$res->{THROUGH_DOC_NUMBER} = $through_doc;
-	    }
-	}
+	my ($oper, $through_doc, undef) = unpack("Cv", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{THROUGH_DOC_NUMBER} = $through_doc;
     }
 
     return $res;
@@ -1490,25 +1266,19 @@ sub get_payment_amount
 {
     # amount is big int string
     my ($self, $pass, $amount, undef) = @_;
-    my $buf = pack_stx(10, GET_PAYMENT_AMOUNT, "Va5", $pass, get_le_bigint5_from_string($amount));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(10, GET_PAYMENT_AMOUNT, "Va5", $pass, get_le_bigint5_from_string($amount));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, $through_doc, undef) = unpack("Cv", $buf);
-		$res->{OPERATOR} = $oper;
-		$res->{THROUGH_DOC_NUMBER} = $through_doc;
-	    }
-	}
+	my ($oper, $through_doc, undef) = unpack("Cv", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{THROUGH_DOC_NUMBER} = $through_doc;
     }
 
     return $res;
@@ -1517,27 +1287,21 @@ sub get_payment_amount
 sub set_print_cliche
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, SET_PRINT_CLICHE, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_PRINT_CLICHE, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -1545,24 +1309,18 @@ sub set_print_cliche
 sub set_document_end
 {
     my ($self, $pass, $param, undef) = @_;
-    my $buf = pack_stx(6, SET_DOCUMENT_END, "VC", $pass, $param);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, SET_DOCUMENT_END, "VC", $pass, $param);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -1571,24 +1329,18 @@ sub set_document_end
 sub set_print_ad_text
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_PRINT_AD_TEXT, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_PRINT_AD_TEXT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -1598,20 +1350,13 @@ sub set_serial_number
 {
     # serial is 4 byte: "00000000"
     my ($self, $pass, $serial, undef) = @_;
-    my $buf = pack_stx(9, SET_SERIAL_NUMBER, "V(H2)4", $pass, unpack("(A2)4", $serial));
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(9, SET_SERIAL_NUMBER, "V(H2)4", $pass, unpack("(A2)4", $serial));
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -1619,20 +1364,13 @@ sub set_serial_number
 sub set_fp_init
 {
     my $self = shift;
-    my $buf = pack_stx(1, SET_FP_INIT, "");
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(1, SET_FP_INIT, "");
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -1640,30 +1378,23 @@ sub set_fp_init
 sub get_fp_sum_records
 {
     my ($self, $pass, $type, undef) = @_;
-    my $buf = pack_stx(6, GET_FP_SUM_RECORDS, "VC", $pass, $type);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, GET_FP_SUM_RECORDS, "VC", $pass, $type);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
+	my ($oper, $salesum, $buysum, $salesum_returns, $buysum_returns, undef) = unpack("Ca8a6a6a6", $buf);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, $salesum, $buysum, $salesum_returns, $buysum_returns, undef) = unpack("Ca8a6a6a6", $buf);
-
-		$res->{OPERATOR} = $oper;
-		$res->{SUM_SALE_TOTAL} = get_hexnum_from_binary_le($salesum);
-		$res->{SUM_BUY_TOTAL} = get_hexnum_from_binary_le($buysum);
-		$res->{SUM_SALE_RETURNS} = get_hexnum_from_binary_le($salesum_returns);
-		$res->{SUM_BUY_TOTAL} = get_hexnum_from_binary_le($buysum_returns);
-	    }
-	}
+	$res->{OPERATOR} = $oper;
+	$res->{SUM_SALE_TOTAL} = get_hexnum_from_binary_le($salesum);
+	$res->{SUM_BUY_TOTAL} = get_hexnum_from_binary_le($buysum);
+	$res->{SUM_SALE_RETURNS} = get_hexnum_from_binary_le($salesum_returns);
+	$res->{SUM_BUY_TOTAL} = get_hexnum_from_binary_le($buysum_returns);
     }
 
     return $res;
@@ -1672,28 +1403,21 @@ sub get_fp_sum_records
 sub get_fp_last_record_date
 {
     my ($self, $pass, $type, undef) = @_;
-    my $buf = pack_stx(5, GET_FP_LAST_RECORD_DATE, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_FP_LAST_RECORD_DATE, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
+	my ($oper, $type, $date_day, $date_month, $date_year, undef) = unpack("CCCCC", $buf);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, $type, $date_day, $date_month, $date_year, undef) = unpack("CCCCC", $buf);
-
-		$res->{OPERATOR} = $oper;
-		$res->{LAST_RECORD_TYPE} = $type;
-		$res->{LAST_RECORD_DATE} = format_date(2000 + $date_year, $date_month, $date_day);
-	    }
-	}
+	$res->{OPERATOR} = $oper;
+	$res->{LAST_RECORD_TYPE} = $type;
+	$res->{LAST_RECORD_DATE} = format_date(2000 + $date_year, $date_month, $date_day);
     }
 
     return $res;
@@ -1702,30 +1426,23 @@ sub get_fp_last_record_date
 sub get_query_date_range_tour
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_QUERY_DATE_RANGE_TOUR, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_QUERY_DATE_RANGE_TOUR, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
+	my ($first_day, $first_month, $first_year,
+	    $last_day, $last_month, $last_year, $first_number, $last_number,  undef) = unpack("CCCCCCvv", $buf);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($first_day, $first_month, $first_year,
-		    $last_day, $last_month, $last_year, $first_number, $last_number,  undef) = unpack("CCCCCCvv", $buf);
-
-		$res->{FIRST_TOUR_DATE} = format_date(2000 + $first_year, $first_month, $first_day);
-		$res->{LAST_TOUR_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
-		$res->{FIRST_TOUR_NUMBER} = $first_number;
-		$res->{LAST_TOUR_NUMBER} = $last_number;
-	    }
-	}
+	$res->{FIRST_TOUR_DATE} = format_date(2000 + $first_year, $first_month, $first_day);
+	$res->{LAST_TOUR_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
+	$res->{FIRST_TOUR_NUMBER} = $first_number;
+	$res->{LAST_TOUR_NUMBER} = $last_number;
     }
 
     return $res;
@@ -1736,29 +1453,22 @@ sub set_fiscalization
     # rnm is 5 byte: "0000000000"
     # inn is 6 byte: "000000000000"
     my ($self, $pass_old, $pass_new, $rnm, $inn, undef) = @_;
-    my $buf = pack_stx(20, SET_FISCALIZATION, "VV(H2)5(H2)6", $pass_old, $pass_new, unpack("(A2)5", $rnm), unpack("(A2)6", $inn));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(20, SET_FISCALIZATION, "VV(H2)5(H2)6", $pass_old, $pass_new, unpack("(A2)5", $rnm), unpack("(A2)6", $inn));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
+	my ($fiscal_number, $fiscal_last, $last_tour, $last_day, $last_month, $last_year, undef) = unpack("CCvCCC", $buf);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($fiscal_number, $fiscal_last, $last_tour, $last_day, $last_month, $last_year, undef) = unpack("CCvCCC", $buf);
-
-                $res->{FISCAL_NUMBER} = $fiscal_number;
-                $res->{FISCAL_LAST} = $fiscal_last;
-                $res->{FISCAL_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
-                $res->{LAST_TOUR_NUMBER} = $last_tour;
-	    }
-	}
+        $res->{FISCAL_NUMBER} = $fiscal_number;
+        $res->{FISCAL_LAST} = $fiscal_last;
+        $res->{FISCAL_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
+        $res->{LAST_TOUR_NUMBER} = $last_tour;
     }
 
     return $res;
@@ -1767,30 +1477,23 @@ sub set_fiscalization
 sub get_fiscal_report_by_date
 {
     my ($self, $pass, $type, $year1, $month1, $day1, $year2, $month2, $day2, undef) = @_;
-    my $buf = pack_stx(12, GET_FISCAL_REPORT_BY_DATE, "VCCCCCCC", $pass, $type, $day1, $month1, substr($year1, -2, 2), $day2, $month2, substr($year2, -2, 2));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(12, GET_FISCAL_REPORT_BY_DATE, "VCCCCCCC", $pass, $type, $day1, $month1, substr($year1, -2, 2), $day2, $month2, substr($year2, -2, 2));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
+	my ($first_day, $first_month, $first_year,
+	    $last_day, $last_month, $last_year, $first_number, $last_number,  undef) = unpack("CCCCCCvv", $buf);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($first_day, $first_month, $first_year,
-		    $last_day, $last_month, $last_year, $first_number, $last_number,  undef) = unpack("CCCCCCvv", $buf);
-
-		$res->{FIRST_TOUR_DATE} = format_date(2000 + $first_year, $first_month, $first_day);
-		$res->{LAST_TOUR_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
-		$res->{FIRST_TOUR_NUMBER} = $first_number;
-		$res->{LAST_TOUR_NUMBER} = $last_number;
-	    }
-	}
+	$res->{FIRST_TOUR_DATE} = format_date(2000 + $first_year, $first_month, $first_day);
+	$res->{LAST_TOUR_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
+	$res->{FIRST_TOUR_NUMBER} = $first_number;
+	$res->{LAST_TOUR_NUMBER} = $last_number;
     }
 
     return $res;
@@ -1799,30 +1502,23 @@ sub get_fiscal_report_by_date
 sub get_fiscal_report_by_tour
 {
     my ($self, $pass, $type, $firstnum, $lastnum, undef) = @_;
-    my $buf = pack_stx(10, GET_FISCAL_REPORT_BY_TOUR, "VCvv", $pass, $type, $firstnum, $lastnum);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(10, GET_FISCAL_REPORT_BY_TOUR, "VCvv", $pass, $type, $firstnum, $lastnum);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
+	my ($first_day, $first_month, $first_year,
+	    $last_day, $last_month, $last_year, $first_number, $last_number,  undef) = unpack("CCCCCCvv", $buf);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($first_day, $first_month, $first_year,
-		    $last_day, $last_month, $last_year, $first_number, $last_number,  undef) = unpack("CCCCCCvv", $buf);
-
-		$res->{FIRST_TOUR_DATE} = format_date(2000 + $first_year, $first_month, $first_day);
-		$res->{LAST_TOUR_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
-		$res->{FIRST_TOUR_NUMBER} = $first_number;
-		$res->{LAST_TOUR_NUMBER} = $last_number;
-	    }
-	}
+	$res->{FIRST_TOUR_DATE} = format_date(2000 + $first_year, $first_month, $first_day);
+	$res->{LAST_TOUR_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
+	$res->{FIRST_TOUR_NUMBER} = $first_number;
+	$res->{LAST_TOUR_NUMBER} = $last_number;
     }
 
     return $res;
@@ -1831,20 +1527,13 @@ sub get_fiscal_report_by_tour
 sub set_break_full_report
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_BREAK_FULL_REPORT, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_BREAK_FULL_REPORT, "V", $pass);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -1852,29 +1541,22 @@ sub set_break_full_report
 sub get_fiscalization_params
 {
     my ($self, $pass, $fiscalnum, undef) = @_;
-    my $buf = pack_stx(6, GET_FISCALIZATION_PARAMS, "VC", $pass, $fiscalnum);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, GET_FISCALIZATION_PARAMS, "VC", $pass, $fiscalnum);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
+	my ($rnm, $inn, $tour_number, $fiscal_day, $fiscal_month, $fiscal_year, undef) = unpack("a5a6vCCC", $buf);
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($rnm, $inn, $tour_number, $fiscal_day, $fiscal_month, $fiscal_year, undef) = unpack("a5a6vCCC", $buf);
-
-		$res->{RNM_NUMBER} = get_hexnum_from_binary_le($rnm);
-		$res->{INN_NUMBER} = get_hexnum_from_binary_le($inn);
-		$res->{TOUR_NUMBER_AFTER_FICAL} = $tour_number;
-		$res->{FIRST_TOUR_DATE} = format_date(2000 + $fiscal_year, $fiscal_month, $fiscal_day);
-	    }
-	}
+	$res->{RNM_NUMBER} = get_hexnum_from_binary_le($rnm);
+	$res->{INN_NUMBER} = get_hexnum_from_binary_le($inn);
+	$res->{TOUR_NUMBER_AFTER_FICAL} = $tour_number;
+	$res->{FIRST_TOUR_DATE} = format_date(2000 + $fiscal_year, $fiscal_month, $fiscal_day);
     }
 
     return $res;
@@ -1885,28 +1567,21 @@ sub set_open_fiscal_underdoc
     my ($self, $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth,
 	$font_number_cliche, $font_number_header, $font_number_eklz, $font_number_kpk, $string_number_cliche, $string_number_header, $string_number_eklz, $string_number_repeat,
 	$offset_cliche, $offset_header, $offset_eklz, $offset_kpk, $offset_repeat, undef) = @_;
-    my $buf = pack_stx(26, SET_OPEN_FISCAL_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCC", $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth,
+
+    my $res = {};
+    my $buf = $self->send_cmd(26, SET_OPEN_FISCAL_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCC", $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth,
 	$font_number_cliche, $font_number_header, $font_number_eklz, $font_number_kpk, $string_number_cliche, $string_number_header, $string_number_eklz, $string_number_repeat,
 	$offset_cliche, $offset_header, $offset_eklz, $offset_kpk, $offset_repeat);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, $through_doc, undef) = unpack("Cv", $buf);
-		$res->{OPERATOR} = $oper;
-		$res->{THROUGH_DOC_NUMBER} = $through_doc;
-	    }
-	}
+	my ($oper, $through_doc, undef) = unpack("Cv", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{THROUGH_DOC_NUMBER} = $through_doc;
     }
 
     return $res;
@@ -1915,26 +1590,19 @@ sub set_open_fiscal_underdoc
 sub set_open_standard_fiscal_underdoc
 {
     my ($self, $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth, undef) = @_;
-    my $buf = pack_stx(13, SET_OPEN_STD_FISCAL_UNDERDOC, "VCCCCCCCC", $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(13, SET_OPEN_STD_FISCAL_UNDERDOC, "VCCCCCCCC", $pass, $type, $print_doubles, $count_doubles, $offset_orig_first, $offset_first_second, $offset_second_third, $offset_third_fourth, $offset_fourth_fifth);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, $through_doc, undef) = unpack("Cv", $buf);
-		$res->{OPERATOR} = $oper;
-		$res->{THROUGH_DOC_NUMBER} = $through_doc;
-	    }
-	}
+	my ($oper, $through_doc, undef) = unpack("Cv", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{THROUGH_DOC_NUMBER} = $through_doc;
     }
 
     return $res;
@@ -1951,31 +1619,22 @@ sub set_forming_operation_underdoc
 	$offset_field_str, $offset_field_mul, $offset_field_sum, $offset_field_dep,
 	$number_string_pd, $amount, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(82, SET_FORMING_OPERATION_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCCCa5a5CCCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(82, SET_FORMING_OPERATION_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCCCa5a5CCCCCA40", $pass,
 	$number_format, $string_count, $string_number, $string_number_mul, $string_number_sum, $string_number_dep,
 	$font_number_str, $font_number_count, $font_number_mul, $font_number_price, $font_number_sum, $font_number_dep,
 	$count_sym_field_str, $count_sym_field_count, $count_sym_field_price, $count_sym_field_sum, $count_sym_field_dep,
 	$offset_field_str, $offset_field_mul, $offset_field_sum, $offset_field_dep,
 	$number_string_pd, get_le_bigint5_from_string($amount), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
-    my $res = ();
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
-    if($self->write_buf($buf))
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -1989,27 +1648,18 @@ sub set_forming_standard_operation_underdoc
     my ($self, $pass, 
 	$number_string_pd, $amount, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(61, SET_FORMING_STD_OPERATION_UNDERDOC, "VCa5a5CCCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(61, SET_FORMING_STD_OPERATION_UNDERDOC, "VCa5a5CCCCCA40", $pass,
 	$number_string_pd, get_le_bigint5_from_string($amount), get_le_bigint5_from_string($price), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
-    my $res = ();
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
-    if($self->write_buf($buf))
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2023,29 +1673,20 @@ sub set_forming_discount_underdoc
 	$count_sym_field_str, $count_sym_field_sum, $offset_field_str, $offset_field_name, $offset_field_sum, $operation_type, $number_string_pd,
 	$amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(68, SET_FORMING_DISCOUNT_UNDERDOC, "VCCCCCCCCCCCCCCa5CCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(68, SET_FORMING_DISCOUNT_UNDERDOC, "VCCCCCCCCCCCCCCa5CCCCA40", $pass,
 	$string_count, $string_number_str, $string_number_name, $string_number_sum, $font_number_str, $font_number_name, $font_number_sum,
 	$count_sym_field_str, $count_sym_field_sum, $offset_field_str, $offset_field_name, $offset_field_sum, $operation_type, $number_string_pd,
 	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
-    my $res = ();
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
-    if($self->write_buf($buf))
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2058,27 +1699,18 @@ sub set_forming_std_discount_underdoc
     my ($self, $pass, $operation_type, $string_number_pd,
 	$amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(56, SET_FORMING_STD_DISCOUNT_UNDERDOC, "VCCa5CCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(56, SET_FORMING_STD_DISCOUNT_UNDERDOC, "VCCa5CCCCA40", $pass,
 	$operation_type, $string_number_pd, get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
-    my $res = ();
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
-    if($self->write_buf($buf))
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2117,7 +1749,8 @@ sub set_forming_close_check_underdoc
 	$offset_field_total, $offset_field_sum_accrual_discount, $offset_field_discount_xx, $offset_field_sum_discount,
 	$number_string_pd, $amount, $amount_type2, $amount_type3, $amount_type4, $discout_on_check, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(182, SET_FORMING_CLOSE_CHECK_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCa5a5a5a5vCCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(182, SET_FORMING_CLOSE_CHECK_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCa5a5a5a5vCCCCA40", $pass,
 	$string_count, $string_number_amount, $string_number_str, $string_number_cash,
 	$string_number_payment_type2, $string_number_payment_type3, $string_number_payment_type4, $string_number_short_change,
 	$string_number_return_tax_a, $string_number_return_tax_b, $string_number_return_tax_v, $string_number_return_tax_g, 
@@ -2147,25 +1780,15 @@ sub set_forming_close_check_underdoc
 	get_le_bigint5_from_string($amount), get_le_bigint5_from_string($amount_type2), get_le_bigint5_from_string($amount_type3), get_le_bigint5_from_string($amount_type4),
 	get_binary_discout_check($discout_on_check), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
-    my $res = ();
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
-    if($self->write_buf($buf))
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, $change, undef) = unpack("Ca5", $buf);
-		$res->{OPERATOR} = $oper;
-		$res->{SHORT_CHANGE} = get_string_from_le_bigint5($change);
-	    }
-	}
+	my ($oper, $change, undef) = unpack("Ca5", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{SHORT_CHANGE} = get_string_from_le_bigint5($change);
     }
 
     return $res;
@@ -2179,29 +1802,20 @@ sub set_forming_std_close_check_underdoc
     my ($self, $pass, $number_string_pd, $amount, $amount_type2, $amount_type3, $amount_type4,
 	$discout_on_check, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(72, SET_FORMING_STD_CLOSE_CHECK_UNDERDOC, "VCa5a5a5a5vCCCCA40", $pass, $number_string_pd,
+    my $res = {};
+    my $buf = $self->send_cmd(72, SET_FORMING_STD_CLOSE_CHECK_UNDERDOC, "VCa5a5a5a5vCCCCA40", $pass, $number_string_pd,
 	get_le_bigint5_from_string($amount), get_le_bigint5_from_string($amount_type2), get_le_bigint5_from_string($amount_type3), get_le_bigint5_from_string($amount_type4),
 	get_binary_discout_check($discout_on_check), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
 
-    my $res = ();
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
-    if($self->write_buf($buf))
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, $change, undef) = unpack("Ca5", $buf);
-		$res->{OPERATOR} = $oper;
-		$res->{SHORT_CHANGE} = get_string_from_le_bigint5($change);
-	    }
-	}
+	my ($oper, $change, undef) = unpack("Ca5", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{SHORT_CHANGE} = get_string_from_le_bigint5($change);
     }
 
     return $res;
@@ -2210,25 +1824,18 @@ sub set_forming_std_close_check_underdoc
 sub set_configuration_underdoc
 {
     my ($self, $pass, $width_underdoc, $length_underdoc, $print_direction, $array_ref, undef) = @_;
-    my $buf = pack_stx(209, SET_CONFIGURATION_UNDERDOC, "VvvCa199", $pass, $width_underdoc, $length_underdoc, $print_direction, @{$array_ref});
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(209, SET_CONFIGURATION_UNDERDOC, "VvvCa199", $pass, $width_underdoc, $length_underdoc, $print_direction, @{$array_ref});
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2237,25 +1844,18 @@ sub set_configuration_underdoc
 sub set_std_configuration_underdoc
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_STD_CONFIGURATION_UNDERDOC, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_STD_CONFIGURATION_UNDERDOC, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2264,25 +1864,18 @@ sub set_std_configuration_underdoc
 sub set_fill_buffer_underdoc
 {
     my ($self, $pass, $string_number, $data, undef) = @_;
-    my $buf = pack_stx(6 + length($data), SET_FILL_BUFFER_UNDERDOC, "VCa*", $pass, $string_number, $data);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6 + length($data), SET_FILL_BUFFER_UNDERDOC, "VCa*", $pass, $string_number, $data);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2291,25 +1884,18 @@ sub set_fill_buffer_underdoc
 sub set_clear_string_underdoc
 {
     my ($self, $pass, $string_number, undef) = @_;
-    my $buf = pack_stx(6, SET_CLEAR_STRING_UNDERDOC, "VC", $pass, $string_number);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, SET_CLEAR_STRING_UNDERDOC, "VC", $pass, $string_number);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2318,25 +1904,18 @@ sub set_clear_string_underdoc
 sub set_clear_buffer_underdoc
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_CLEAR_BUFFER_UNDERDOC, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_CLEAR_BUFFER_UNDERDOC, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2345,28 +1924,21 @@ sub set_clear_buffer_underdoc
 sub set_print_underdoc
 {
     my ($self, $pass, $clear, $type, $wait, undef) = @_;
-    my $buf = pack_stx(7, SET_PRINT_UNDERDOC, "VCC", $pass, $clear, $type);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(7, SET_PRINT_UNDERDOC, "VCC", $pass, $clear, $type);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -2374,28 +1946,21 @@ sub set_print_underdoc
 sub get_general_configuration_underdoc
 {
     my ($self, $pass, $width, $length, $direction, $spacing, $wait, undef) = @_;
-    my $buf = pack_stx(7, GET_GENERAL_CONFIGURATION_UNDERDOC, "VvvCC", $pass, $width, $length, $direction, $spacing);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(7, GET_GENERAL_CONFIGURATION_UNDERDOC, "VvvCC", $pass, $width, $length, $direction, $spacing);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -2405,26 +1970,18 @@ sub set_sell
     # quantity, amount is big int string
     my ($self, $pass, $quantity, $amount, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(60, SET_SELL, "Va5a5CCCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(60, SET_SELL, "Va5a5CCCCCA40", $pass,
 	get_le_bigint5_from_string($quantity), get_le_bigint5_from_string($amount), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2435,26 +1992,18 @@ sub set_buy
     # quantity, amount is big int string
     my ($self, $pass, $quantity, $amount, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(60, SET_BUY, "Va5a5CCCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(60, SET_BUY, "Va5a5CCCCCA40", $pass,
 	get_le_bigint5_from_string($quantity), get_le_bigint5_from_string($amount), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2465,26 +2014,18 @@ sub set_returns_sale
     # quantity, amount is big int string
     my ($self, $pass, $quantity, $amount, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(60, SET_RETURNS_SALE, "Va5a5CCCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(60, SET_RETURNS_SALE, "Va5a5CCCCCA40", $pass,
 	get_le_bigint5_from_string($quantity), get_le_bigint5_from_string($amount), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2495,26 +2036,18 @@ sub set_returns_purchases
     # quantity, amount is big int string
     my ($self, $pass, $quantity, $amount, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(60, SET_RETURNS_PURCHASES, "Va5a5CCCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(60, SET_RETURNS_PURCHASES, "Va5a5CCCCCA40", $pass,
 	get_le_bigint5_from_string($quantity), get_le_bigint5_from_string($amount), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2525,26 +2058,18 @@ sub set_reversal
     # quantity, amount is big int string
     my ($self, $pass, $quantity, $amount, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(60, SET_REVERSAL, "Va5a5CCCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(60, SET_REVERSAL, "Va5a5CCCCCA40", $pass,
 	get_le_bigint5_from_string($quantity), get_le_bigint5_from_string($amount), $department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2555,28 +2080,20 @@ sub set_check_close
     # cash_sum, sum_type2, sum_type3, sum_type4 is big int string
     my ($self, $pass, $cash_sum, $sum_type2, $sum_type3, $sum_type4, $discount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(71, SET_CHECK_CLOSE, "Va5a5a5a5vCCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(71, SET_CHECK_CLOSE, "Va5a5a5a5vCCCCA40", $pass,
 	get_le_bigint5_from_string($cash_sum), get_le_bigint5_from_string($sum_type2), get_le_bigint5_from_string($sum_type3), get_le_bigint5_from_string($sum_type4),
 	get_binary_discout_check($discount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-                my ($oper, $change, undef) = unpack("Ca5", $buf);
-                $res->{OPERATOR} = $oper;
-                $res->{SHORT_CHANGE} = get_string_from_le_bigint5($change);
-            }
-	}
+        my ($oper, $change, undef) = unpack("Ca5", $buf);
+        $res->{OPERATOR} = $oper;
+        $res->{SHORT_CHANGE} = get_string_from_le_bigint5($change);
     }
 
     return $res;
@@ -2587,26 +2104,18 @@ sub set_discount
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(54, SET_DISCOUT, "Va5CCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(54, SET_DISCOUT, "Va5CCCCA40", $pass,
 	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-                my ($oper, undef) = unpack("C", $buf);
-                $res->{OPERATOR} = $oper;
-            }
-	}
+        my ($oper, undef) = unpack("C", $buf);
+        $res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2617,26 +2126,18 @@ sub set_allowance
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(54, SET_ALLOWANCE, "Va5CCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(54, SET_ALLOWANCE, "Va5CCCCA40", $pass,
 	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-                my ($oper, undef) = unpack("C", $buf);
-                $res->{OPERATOR} = $oper;
-            }
-	}
+        my ($oper, undef) = unpack("C", $buf);
+        $res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2645,25 +2146,18 @@ sub set_allowance
 sub set_check_cancellation
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_CHECK_CANCELLATION, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_CHECK_CANCELLATION, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-                my ($oper, undef) = unpack("C", $buf);
-                $res->{OPERATOR} = $oper;
-            }
-	}
+        my ($oper, undef) = unpack("C", $buf);
+        $res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2672,26 +2166,19 @@ sub set_check_cancellation
 sub get_check_subtotal
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_CHECK_SUBTOTAL, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_CHECK_SUBTOTAL, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-                my ($oper, $subtotal, undef) = unpack("Ca5", $buf);
-                $res->{OPERATOR} = $oper;
-                $res->{CHECK_SUBTOTAL} = get_string_from_le_bigint5($subtotal);
-            }
-	}
+        my ($oper, $subtotal, undef) = unpack("Ca5", $buf);
+        $res->{OPERATOR} = $oper;
+        $res->{CHECK_SUBTOTAL} = get_string_from_le_bigint5($subtotal);
     }
 
     return $res;
@@ -2702,26 +2189,18 @@ sub set_reversal_discount
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(54, SET_REVERSAL_DISCOUNT, "Va5CCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(54, SET_REVERSAL_DISCOUNT, "Va5CCCCA40", $pass,
 	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-                my ($oper, undef) = unpack("C", $buf);
-                $res->{OPERATOR} = $oper;
-            }
-	}
+        my ($oper, undef) = unpack("C", $buf);
+        $res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2732,26 +2211,18 @@ sub set_reversal_allowance
     # amount is big int string
     my ($self, $pass, $amount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
-    my $buf = pack_stx(54, SET_REVERSAL_ALLOWANCE, "Va5CCCCA40", $pass,
+    my $res = {};
+    my $buf = $self->send_cmd(54, SET_REVERSAL_ALLOWANCE, "Va5CCCCA40", $pass,
 	get_le_bigint5_from_string($amount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-                my ($oper, undef) = unpack("C", $buf);
-                $res->{OPERATOR} = $oper;
-            }
-	}
+        my ($oper, undef) = unpack("C", $buf);
+        $res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2760,28 +2231,21 @@ sub set_reversal_allowance
 sub get_document_repeat
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, GET_DOCUMENT_REPEAT, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_DOCUMENT_REPEAT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
+        my ($oper, undef) = unpack("C", $buf);
+        $res->{OPERATOR} = $oper;
 
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-                my ($oper, undef) = unpack("C", $buf);
-                $res->{OPERATOR} = $oper;
-            }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -2789,25 +2253,18 @@ sub get_document_repeat
 sub set_check_open
 {
     my ($self, $pass, $type, undef) = @_;
-    my $buf = pack_stx(6, SET_CHECK_OPEN, "VC", $pass, $type);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, SET_CHECK_OPEN, "VC", $pass, $type);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-                my ($oper, undef) = unpack("C", $buf);
-                $res->{OPERATOR} = $oper;
-            }
-	}
+        my ($oper, undef) = unpack("C", $buf);
+        $res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2841,27 +2298,21 @@ sub set_check_open
 sub set_print_continue
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, SET_PRINT_CONTINUE, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_PRINT_CONTINUE, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -2869,24 +2320,18 @@ sub set_print_continue
 sub set_load_graphics
 {
     my ($self, $pass, $linenum, $data, undef) = @_;
-    my $buf = pack_stx(46, SET_LOAD_GRAPHICS, "VCa40", $pass, $linenum, @{$data});
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(46, SET_LOAD_GRAPHICS, "VCa40", $pass, $linenum, @{$data});
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2895,27 +2340,21 @@ sub set_load_graphics
 sub set_print_graphics
 {
     my ($self, $pass, $first, $last, $wait, undef) = @_;
-    my $buf = pack_stx(7, SET_PRINT_GRAPHICS, "VCC", $pass, $first, $last);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(7, SET_PRINT_GRAPHICS, "VCC", $pass, $first, $last);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -2924,27 +2363,21 @@ sub set_print_barcode
 {
     # barcode is big int string
     my ($self, $pass, $barcode, $wait, undef) = @_;
-    my $buf = pack_stx(10, SET_PRINT_BARCODE, "Va5", $pass, get_le_bigint5_from_string($barcode));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(10, SET_PRINT_BARCODE, "Va5", $pass, get_le_bigint5_from_string($barcode));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+        $self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -2952,24 +2385,18 @@ sub set_print_barcode
 sub set_load_ext_graphics
 {
     my ($self, $pass, $linenum, $data, undef) = @_;
-    my $buf = pack_stx(47, SET_LOAD_EXT_GRAPHICS, "Vva40", $pass, $linenum, @{$data});
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(47, SET_LOAD_EXT_GRAPHICS, "Vva40", $pass, $linenum, @{$data});
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2978,27 +2405,21 @@ sub set_load_ext_graphics
 sub set_print_ext_graphics
 {
     my ($self, $pass, $first, $last, $wait, undef) = @_;
-    my $buf = pack_stx(9, SET_PRINT_EXT_GRAPHICS, "Vvv", $pass, $first, $last);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(9, SET_PRINT_EXT_GRAPHICS, "Vvv", $pass, $first, $last);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -3006,27 +2427,21 @@ sub set_print_ext_graphics
 sub set_print_line
 {
     my ($self, $pass, $repeats, $data, $wait, undef) = @_;
-    my $buf = pack_stx(7 + scalar @{$data}, SET_PRINT_LINE, "Vva*", $pass, $repeats, @{$data});
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(7 + scalar @{$data}, SET_PRINT_LINE, "Vva*", $pass, $repeats, @{$data});
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -3034,24 +2449,18 @@ sub set_print_line
 sub set_daily_report_damp_buffer
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_DAILY_REPORT_DAMP_BUFFER, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_DAILY_REPORT_DAMP_BUFFER, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -3060,27 +2469,21 @@ sub set_daily_report_damp_buffer
 sub set_print_daily_report_buffer
 {
     my ($self, $pass, $wait, undef) = @_;
-    my $buf = pack_stx(5, SET_PRINT_DAILY_REPORT_BUFFER, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_PRINT_DAILY_REPORT_BUFFER, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -3088,25 +2491,19 @@ sub set_print_daily_report_buffer
 sub get_rowcount_printbuf
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_ROWCOUNT_PRINTBUF, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_ROWCOUNT_PRINTBUF, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($count1, $count2, undef) = unpack("vv", $buf);
-		$res->{ROW_COUNT_PRINTBUF} = $count1;
-		$res->{ROW_COUNT_PRINTED} = $count2;
-	    }
-	}
+	my ($count1, $count2, undef) = unpack("vv", $buf);
+	$res->{ROW_COUNT_PRINTBUF} = $count1;
+	$res->{ROW_COUNT_PRINTED} = $count2;
     }
 
     return $res;
@@ -3115,24 +2512,18 @@ sub get_rowcount_printbuf
 sub get_string_printbuf
 {
     my ($self, $pass, $numstr, undef) = @_;
-    my $buf = pack_stx(7, GET_STRING_PRINTBUF, "Vv", $pass, $numstr);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(7, GET_STRING_PRINTBUF, "Vv", $pass, $numstr);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($data, undef) = unpack("a*", $buf);
-		$res->{DATA_STRING} = get_hexdump($data);
-	    }
-	}
+	my ($data, undef) = unpack("a*", $buf);
+	$res->{DATA_STRING} = get_hexdump($data);
     }
 
     return $res;
@@ -3141,19 +2532,13 @@ sub get_string_printbuf
 sub set_clear_printbuf
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(7, SET_CLEAR_PRINTBUF, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    my $res = {};
+    my $buf = $self->send_cmd(7, SET_CLEAR_PRINTBUF, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -3161,41 +2546,35 @@ sub set_clear_printbuf
 sub get_fr_ibm_status_long
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_FR_IBM_STATUS_LONG, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_FR_IBM_STATUS_LONG, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, $cur_year, $cur_month, $cur_day, $cur_hour, $cur_min, $cur_sec,
+	    $last_tour, $last_docnum, $checks_sale, $checks_buy, $checks_sale_returns, $checks_buy_returns,
+	    $open_year, $open_month, $open_day, $open_hour, $open_min, $open_sec,
+	    $cash, $status, $flags, undef) = unpack("CCCCCCCvVvvvvCCCCCCa6a8C", $buf);
 
-	    if($buf)
-	    {
-		my ($oper, $cur_year, $cur_month, $cur_day, $cur_hour, $cur_min, $cur_sec,
-		    $last_tour, $last_docnum, $checks_sale, $checks_buy, $checks_sale_returns, $checks_buy_returns,
-		    $open_year, $open_month, $open_day, $open_hour, $open_min, $open_sec,
-		    $cash, $status, $flags, undef) = unpack("CCCCCCCvVvvvvCCCCCCa6a8C", $buf);
-
-		$res->{OPERATOR} = $oper;
-		$res->{CURRENT_DATE} = format_date(2000 + $cur_year, $cur_month, $cur_day);
-		$res->{CURRENT_TIME} = format_time($cur_hour, $cur_min, $cur_sec);
-		$res->{LAST_TOUR_NUMBER} = $last_tour;
-		$res->{LAST_DOCNUM} = $last_docnum;
-		$res->{COUNT_CHECKS_SALE} = $checks_sale;
-		$res->{COUNT_CHECKS_BUY} = $checks_buy;
-		$res->{COUNT_CHECKS_SALE_RETURNS} = $checks_sale_returns;
-		$res->{COUNT_CHECKS_BUY_RETURNS} = $checks_buy_returns;
-		$res->{OPEN_TOUR_DATE} = format_date(2000 + $open_year, $open_month, $open_day);
-		$res->{OPEN_TOUR_TIME} = format_time($open_hour, $open_min, $open_sec);
-		$res->{CASH} = get_hexdump($cash);
-		$res->{STATUS} = get_hexdump($status);
-		$res->{FLAGS} = $flags;
-	    }
-	}
+	$res->{OPERATOR} = $oper;
+	$res->{CURRENT_DATE} = format_date(2000 + $cur_year, $cur_month, $cur_day);
+	$res->{CURRENT_TIME} = format_time($cur_hour, $cur_min, $cur_sec);
+	$res->{LAST_TOUR_NUMBER} = $last_tour;
+	$res->{LAST_DOCNUM} = $last_docnum;
+	$res->{COUNT_CHECKS_SALE} = $checks_sale;
+	$res->{COUNT_CHECKS_BUY} = $checks_buy;
+	$res->{COUNT_CHECKS_SALE_RETURNS} = $checks_sale_returns;
+	$res->{COUNT_CHECKS_BUY_RETURNS} = $checks_buy_returns;
+	$res->{OPEN_TOUR_DATE} = format_date(2000 + $open_year, $open_month, $open_day);
+	$res->{OPEN_TOUR_TIME} = format_time($open_hour, $open_min, $open_sec);
+	$res->{CASH} = get_hexdump($cash);
+	$res->{STATUS} = get_hexdump($status);
+	$res->{FLAGS} = $flags;
     }
 
     return $res;
@@ -3204,26 +2583,20 @@ sub get_fr_ibm_status_long
 sub get_fr_ibm_status
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_FR_IBM_STATUS, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_FR_IBM_STATUS, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, $status, $flags, undef) = unpack("Ca8C", $buf);
-		$res->{OPERATOR} = $oper;
-		$res->{STATUS} = get_hexdump($status);
-		$res->{FLAGS} = $flags;
-	    }
-	}
+	my ($oper, $status, $flags, undef) = unpack("Ca8C", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{STATUS} = get_hexdump($status);
+	$res->{FLAGS} = $flags;
     }
 
     return $res;
@@ -3232,24 +2605,18 @@ sub get_fr_ibm_status
 sub set_open_nonfiscal_document
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_OPEN_NONFISCAL_DOCUMENT, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_OPEN_NONFISCAL_DOCUMENT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -3258,24 +2625,18 @@ sub set_open_nonfiscal_document
 sub set_close_nonfiscal_document
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, SET_CLOSE_NONFISCAL_DOCUMENT, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_CLOSE_NONFISCAL_DOCUMENT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -3284,27 +2645,21 @@ sub set_close_nonfiscal_document
 sub set_print_props
 {
     my ($self, $pass, $propnum, $value, $wait, undef) = @_;
-    my $buf = pack_stx(6 + length($value), SET_PRINT_PROPS, "VCA*", $pass, $propnum, $self->encode_string($value));
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6 + length($value), SET_PRINT_PROPS, "VCA*", $pass, $propnum, $self->encode_string($value));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
 
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	$self->printing_wait($pass) if($wait);
     }
-
-    $self->printing_wait($pass) if($wait);
 
     return $res;
 }
@@ -3312,28 +2667,22 @@ sub set_print_props
 sub get_state_bill_acceptor
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_STATE_BILL_ACCEPTOR, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_STATE_BILL_ACCEPTOR, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, $mode, $pool1, $pool2, undef) = unpack("CCCC", $buf);
 
-	    if($buf)
-	    {
-		my ($oper, $mode, $pool1, $pool2, undef) = unpack("CCCC", $buf);
-
-		$res->{OPERATOR} = $oper;
-		$res->{MODE} = $oper;
-		$res->{POOL1} = $pool1;
-		$res->{POOL2} = $pool2;
-	    }
-	}
+	$res->{OPERATOR} = $oper;
+	$res->{MODE} = $oper;
+	$res->{POOL1} = $pool1;
+	$res->{POOL2} = $pool2;
     }
 
     return $res;
@@ -3342,27 +2691,21 @@ sub get_state_bill_acceptor
 sub get_registers_bill_acceptor
 {
     my ($self, $pass, $regnum, undef) = @_;
-    my $buf = pack_stx(6, GET_REGISTERS_BILL_ACCEPTOR, "VC", $pass, $regnum);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, GET_REGISTERS_BILL_ACCEPTOR, "VC", $pass, $regnum);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($oper, $numreg, $pool, @bills) = unpack("CCCCV*", $buf);
 
-	    if($buf)
-	    {
-		my ($oper, $numreg, $pool, @bills) = unpack("CCCCV*", $buf);
-
-		$res->{OPERATOR} = $oper;
-		$res->{REGISTERS_SETS_NUMBER} = $numreg;
-		$res->{NUMBER_OF_BILLS} = join(',', map(ord($_), @bills));
-	    }
-	}
+	$res->{OPERATOR} = $oper;
+	$res->{REGISTERS_SETS_NUMBER} = $numreg;
+	$res->{NUMBER_OF_BILLS} = join(',', map(ord($_), @bills));
     }
 
     return $res;
@@ -3371,24 +2714,18 @@ sub get_registers_bill_acceptor
 sub get_report_bill_acceptor
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_REPORT_BILL_ACCEPTOR, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_REPORT_BILL_ACCEPTOR, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -3397,19 +2734,13 @@ sub get_report_bill_acceptor
 sub get_operational_report_ni
 {
     my ($self, $pass, undef) = @_;
-    my $buf = pack_stx(5, GET_OPERATIONAL_REPORT_NI, "V", $pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_OPERATIONAL_REPORT_NI, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -3417,24 +2748,18 @@ sub get_operational_report_ni
 sub set_flap_control
 {
     my ($self, $pass, $status, undef) = @_;
-    my $buf = pack_stx(6, SET_FLAP_CONTROL, "VC", $pass, $status);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, SET_FLAP_CONTROL, "VC", $pass, $status);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -3443,24 +2768,18 @@ sub set_flap_control
 sub set_check_getout
 {
     my ($self, $pass, $type, undef) = @_;
-    my $buf = pack_stx(6, SET_CHECK_GETOUT, "VC", $pass, $type);
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6, SET_CHECK_GETOUT, "VC", $pass, $type);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -3469,19 +2788,13 @@ sub set_check_getout
 sub set_password_cto
 {
     my ($self, $old_pass, $new_pass, undef) = @_;
-    my $buf = pack_stx(9, SET_PASSWORD_CTO, "VL", $old_pass, $new_pass);
-    my $res = ();
 
-    if($self->write_buf($buf))
-    {
-	if($self->wait_ack())
-	{
-	    $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-	}
-    }
+    my $res = {};
+    my $buf = $self->send_cmd(9, SET_PASSWORD_CTO, "VL", $old_pass, $new_pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
@@ -3489,32 +2802,25 @@ sub set_password_cto
 sub get_device_type
 {
     my $self = shift;
-    my $buf = pack_stx(1, GET_DEVICE_TYPE);
-    
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(1, GET_DEVICE_TYPE);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+	my ($type, $subtype, $version, $subversion, $model, $language, $name) = unpack("CCCCCCA*", $buf);
 
-	    if($buf)
-	    {
-		my ($type, $subtype, $version, $subversion, $model, $language, $name) = unpack("CCCCCCA*", $buf);
-
-		$res->{TYPE} = $type;
-		$res->{SUBTYPE} = $subtype;
-		$res->{VERSION} = $version;
-		$res->{SUBVERSION} = $subversion;
-		$res->{MODEL} = $model;
-		$res->{LANGUAGE} = $language;
-		$res->{NAME} = Encode::decode($self->{ENCODE_TO}, $name);
-	    }
-	}
+	$res->{TYPE} = $type;
+	$res->{SUBTYPE} = $subtype;
+	$res->{VERSION} = $version;
+	$res->{SUBVERSION} = $subversion;
+	$res->{MODEL} = $model;
+	$res->{LANGUAGE} = $language;
+	$res->{NAME} = Encode::decode($self->{ENCODE_TO}, $name);
     }
 
     return $res;
@@ -3523,25 +2829,18 @@ sub get_device_type
 sub set_extdev_command
 {
     my ($self, $pass, $portnum, $data, undef) = @_;
-    my $buf = pack_stx(6 + length($data), SET_EXT_DEVICE_COMMAND, "VCC*", $pass, $portnum, unpack("C*", $data));
-    
-    my $res = ();
 
-    if($self->write_buf($buf))
+    my $res = {};
+    my $buf = $self->send_cmd(6 + length($data), SET_EXT_DEVICE_COMMAND, "VCC*", $pass, $portnum, unpack("C*", $data));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
     {
-	if($self->wait_ack())
-	{
-	    my $buf = $self->wait_stx();
-	    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-	    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-	    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-	    if($buf)
-	    {
-		my ($oper, undef) = unpack("C", $buf);
-		$res->{OPERATOR} = $oper;
-	    }
-	}
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -3551,6 +2850,24 @@ sub set_extdev_command
 # private
 #
 
+sub send_ack
+{
+    my $self = shift;
+    return $self->write_byte(ack());
+}
+
+sub send_nak
+{
+    my $self = shift;
+    return $self->write_byte(nak());
+}
+
+sub send_enq
+{
+    my $self = shift;
+    return $self->write_byte(enq());
+}
+
 sub write_byte
 {
     my $self = shift;
@@ -3558,7 +2875,9 @@ sub write_byte
     my $count = $self->{OBJ}->write($byte);
     if($count != 1)
     {
-	warn(__PACKAGE__, ": $!: ", $self->{PORT});
+	$self->{ERROR_CODE} = 255;
+        $self->{ERROR_MESSAGE} = $! . ": " . $self->{PORT};
+	warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
 	return 0;
     }
     return 1;
@@ -3571,7 +2890,9 @@ sub write_buf
     my $count = $self->{OBJ}->write($data);
     if($count != length($data))
     {
-	warn(__PACKAGE__, ": $!: ", $self->{PORT});
+	$self->{ERROR_CODE} = 255;
+        $self->{ERROR_MESSAGE} = $! . ": " . $self->{PORT};
+	warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
 	return 0;
     }
     return $count;
@@ -3579,21 +2900,29 @@ sub write_buf
 
 sub read_byte
 {
-    my $self = shift;
-    my $timeout = $self->{TIMEOUT} / 1000;
-    if (@_) { $timeout = shift; }
+    my ($self, $timeout, undef) = @_;
+    $timeout = $self->{TIMEOUT} unless($timeout);
 
-    while(0 < $timeout)
+    my $elapsed = 0;
+    my ($sec0, $time0) = gettimeofday();
+
+    do
     {
 	my ($count, $byte) = $self->{OBJ}->read(1);
 	return $byte if(0 < $count);
 
-	# sleep: 1 ms
-	usleep(1000);
-	$timeout--;
+	my ($sec1, $time1) = gettimeofday();
+	$elapsed = ($sec1 - $sec0) * 1000000 + ($time1 - $time0);
+	# wait 1 ms
+	usleep(1000); 
     }
+    while($elapsed < $timeout);
 
-    return 0;
+    $self->{ERROR_CODE} = 255;
+    $self->{ERROR_MESSAGE} = "read byte error";
+    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+
+    return undef;
 }
 
 sub read_buf
@@ -3602,29 +2931,9 @@ sub read_buf
     my $len = shift;
     my $res = "";
 
-    $res .= $self->read_byte() for(1..$len);
+    $res .= $self->read_byte() for(1 .. $len);
 
     return $res;
-}
-
-sub stx
-{
-    return pack("C", CMD_STX);
-}
-
-sub enq
-{
-    return pack("C", CMD_ENQ);
-}
-
-sub ack
-{
-    return pack("C", CMD_ACK);
-}
-
-sub nak
-{
-    return pack("C", CMD_NAK);
 }
 
 sub wait_default
@@ -3636,33 +2945,48 @@ sub wait_default
 sub wait_ack
 {
     my $self = shift;
-    my $res = $self->read_byte($self->{TIMEOUT} * 2);
-    return 1 if(ack() eq $res);
-    warn(__PACKAGE__, ": invalid ack: ", get_hexstr2(ord(ack())), " != ", get_hexstr2(ord($res)));
+    my $ack = $self->read_byte($self->{TIMEOUT} * 2);
+    return 1 if(ack() eq $ack);
+    $self->{ERROR_CODE} = 255;
+    $self->{ERROR_MESSAGE} = "invalid ack: " . get_hexstr2(ord($ack));
+    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
     return 0;
 }
 
-sub wait_stx
+sub read_stx
 {
     my $self = shift;
 
 rep:
-    if(stx() eq $self->read_byte($self->{TIMEOUT} * 2))
+    my $stx = $self->read_byte($self->{TIMEOUT} * 2);
+
+    my $elapsed = 0;
+    my ($sec0, $time0) = gettimeofday();
+
+    if(stx() eq $stx)
     {
-	my $len = $self->read_byte($self->{TIMEOUT} * 2);
-	my $cmd = $self->read_byte($self->{TIMEOUT} * 2);
-	my $err = $self->read_byte($self->{TIMEOUT} * 2);
+	my $len = $self->read_byte();
+	my $cmd = $self->read_byte();
+	my $err = $self->read_byte();
 	my $res = 2 < ord($len) ? $self->read_buf(ord($len) - 2) : "";
 	my $crc1 = $self->read_byte();
-	$self->wait_default();
 	# calc crc
 	my $crc2 = $len ^ $cmd ^ $err;
 	   $crc2 ^= $_ foreach(split('', $res));
+
+	my ($sec1, $time1) = gettimeofday();
+	$elapsed = ($sec1 - $sec0) * 1000000 + ($time1 - $time0);
+	if($elapsed > $self->{TIMEOUT})
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "timeout error, device ENQ mode";
+	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	}
+
 	# check crc
 	if($crc1 == $crc2)
 	{
-	    $self->write_buf(ack());
-	    $self->wait_default();
+	    $self->send_ack();
 	    $self->{ERROR_CODE} = ord($err);
 	    $self->{ERROR_MESSAGE} = 0 < ord($err) ? $self->get_message_error(ord($err)) : "";
 
@@ -3670,26 +2994,182 @@ rep:
 	}
 	else
 	{
-	    warn(__PACKAGE__, ": crc error: ", "repeat: send NAQ and ENQ");
-	    $self->write_buf(naq());
-	    $self->wait_default();
-	    $self->write_buf(enq());
-	    $self->wait_default();
+	    warn(__PACKAGE__, ": crc error: ", "repeat: send NAQ and ENQ") if($self->{DEBUG});
+	    $self->send_naq();
+	    $self->send_enq();
 	    goto rep;
 	}
     }
+    else
+    {
+	$self->{ERROR_CODE} = 255;
+	$self->{ERROR_MESSAGE} = "invalid stx: " . get_hexstr2(ord($stx));
+        warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+    }
 
-    return 0;
+    return undef;
 }
 
-sub pack_stx
+sub send_stx
 {
-    my ($len, $cmd, $str, @param) = @_;
+    my ($self, $len, $cmd, $str, @param) = @_;
     my $res = pack("CC" . $str, $len, $cmd, @param);
     # and crc to tail
     my $crc = 0;
        $crc ^= $_ foreach(unpack("C*", $res));
-    return  stx() . $res . chr($crc);
+    return $self->write_buf(stx() . $res . chr($crc));
+}
+
+sub send_cmd
+{
+    my ($self, $len, $cmd, $str, @param) = @_;
+
+send_enq:
+    usleep(1000); # 1 ms
+
+    # send ENQ
+    return 0 unless($self->send_enq());
+
+    # wait reply
+    my $byte = $self->read_byte($self->{TIMEOUT} * 2);
+    # check timeout
+    unless(defined $byte)
+    {
+	$self->{ERROR_CODE} = 255;
+	$self->{ERROR_MESSAGE} = "device not reply";
+	warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	return 0;
+    }
+
+    # is ACK
+    if(ack() eq $byte)
+    {
+	my $mJ = 0;
+read_stx:
+	$byte = $self->read_byte($self->{TIMEOUT} * 2);
+	unless(defined $byte)
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "wait stx timeout";
+	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    goto read_stx;
+	}
+
+	unless(stx() eq $byte)
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "unknown stx: " . get_hexstr2($byte);
+	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    return 0;
+	}
+
+	$byte = $self->read_byte();
+	unless(defined $byte)
+	{
+	    goto repeat_cmd;
+	}
+	my $len = $byte;
+
+	$byte = $self->read_byte();
+	unless(defined $byte)
+	{
+	    goto repeat_cmd;
+	}
+	my $cmd = $byte;
+
+	$byte = $self->read_byte();
+	unless(defined $byte)
+	{
+	    goto repeat_cmd;
+	}
+	my $err = $byte;
+
+	my $res = 2 < ord($len) ? $self->read_buf(ord($len) - 2) : "";
+	my $crc1 = $self->read_byte();
+	# calc crc
+	my $crc2 = $len ^ $cmd ^ $err;
+	   $crc2 ^= $_ foreach(split('', $res));
+
+	# check crc
+	if($crc1 == $crc2)
+	{
+	    $self->send_ack();
+	    $self->{ERROR_CODE} = ord($err);
+	    $self->{ERROR_MESSAGE} = 0 < ord($err) ? $self->get_message_error(ord($err)) : "";
+
+	    return $res;
+	}
+	else
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "stx crc error";
+    	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    $self->send_naq();
+	}
+
+repeat_cmd:
+	if($mJ < 10)
+	{
+	    $mJ ++;
+	    goto send_enq;
+	}
+	else
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "read stx: device not reply, 10 times";
+	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    return 0;
+	}
+    }
+
+    # is NAK
+    if(nak() eq $byte)
+    {
+	my $mI = 0;
+send_stx:
+	my $res = pack("CC" . $str, $len, $cmd, @param);
+	# and crc to tail
+	my $crc = 0;
+	   $crc ^= $_ foreach(unpack("C*", $res));
+	my $msg = stx() . $res . chr($crc);
+	my $count = $self->write_buf($msg);
+
+	if($count != length($msg))
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "send stx error, $count != " . length($msg);
+	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    return 0;
+	}
+
+	$byte = $self->read_byte($self->{TIMEOUT} * 2);
+	# check timeout
+	goto send_enq unless(defined $byte);
+
+	if(ack() eq $byte)
+	{
+	    goto read_stx;
+	}
+
+	if($mI < 10)
+	{
+	    $mI++;
+	    goto send_stx;
+	}
+	else
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "send stx: device not reply, 10 times";
+	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    return 0;
+	}
+    }
+
+    $self->{ERROR_CODE} = 255;
+    $self->{ERROR_MESSAGE} = "reply unknown: " . get_hexstr2($byte);
+    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+
+    goto send_enq;
 }
 
 sub format_date
