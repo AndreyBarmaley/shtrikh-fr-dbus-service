@@ -286,8 +286,6 @@ sub get_message_fp_flags
 sub is_online
 {
     my $self = shift;
-    $self->wait_default();
-    $self->wait_default();
 
     if($self->send_enq())
     {

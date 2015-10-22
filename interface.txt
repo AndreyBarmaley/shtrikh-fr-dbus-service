@@ -887,7 +887,7 @@ params: wait, bool
 return: dict["string", "string"]
 
 command: 0xC6
-call:   set_daily_report_damp_buffer
+call:   set_daily_report_dump_buffer
 params: password, int32
 return: dict["string", "string"]
 
