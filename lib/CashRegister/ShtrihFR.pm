@@ -18,7 +18,7 @@ use strict;
 
 use constant
 {
-    MY_DRIVER_VERSION => 20151009,
+    MY_DRIVER_VERSION => 20151030,
     FR_PROTOCOL_VERSION	=> 1.12
 };
 
@@ -2940,84 +2940,6 @@ sub wait_default
     usleep($self->{TIMEOUT});
 }
 
-sub wait_ack
-{
-    my $self = shift;
-    my $ack = $self->read_byte($self->{TIMEOUT} * 2);
-    return 1 if(ack() eq $ack);
-    $self->{ERROR_CODE} = 255;
-    $self->{ERROR_MESSAGE} = "invalid ack: " . get_hexstr2(ord($ack));
-    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
-    return 0;
-}
-
-sub read_stx
-{
-    my $self = shift;
-
-rep:
-    my $stx = $self->read_byte($self->{TIMEOUT} * 2);
-
-    my $elapsed = 0;
-    my ($sec0, $time0) = gettimeofday();
-
-    if(stx() eq $stx)
-    {
-	my $len = $self->read_byte();
-	my $cmd = $self->read_byte();
-	my $err = $self->read_byte();
-	my $res = 2 < ord($len) ? $self->read_buf(ord($len) - 2) : "";
-	my $crc1 = $self->read_byte();
-	# calc crc
-	my $crc2 = $len ^ $cmd ^ $err;
-	   $crc2 ^= $_ foreach(split('', $res));
-
-	my ($sec1, $time1) = gettimeofday();
-	$elapsed = ($sec1 - $sec0) * 1000000 + ($time1 - $time0);
-	if($elapsed > $self->{TIMEOUT})
-	{
-	    $self->{ERROR_CODE} = 255;
-	    $self->{ERROR_MESSAGE} = "timeout error, device ENQ mode";
-	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
-	}
-
-	# check crc
-	if($crc1 == $crc2)
-	{
-	    $self->send_ack();
-	    $self->{ERROR_CODE} = ord($err);
-	    $self->{ERROR_MESSAGE} = 0 < ord($err) ? $self->get_message_error(ord($err)) : "";
-
-	    return $res;
-	}
-	else
-	{
-	    warn(__PACKAGE__, ": crc error: ", "repeat: send NAQ and ENQ") if($self->{DEBUG});
-	    $self->send_naq();
-	    $self->send_enq();
-	    goto rep;
-	}
-    }
-    else
-    {
-	$self->{ERROR_CODE} = 255;
-	$self->{ERROR_MESSAGE} = "invalid stx: " . get_hexstr2(ord($stx));
-        warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
-    }
-
-    return undef;
-}
-
-sub send_stx
-{
-    my ($self, $len, $cmd, $str, @param) = @_;
-    my $res = pack("CC" . $str, $len, $cmd, @param);
-    # and crc to tail
-    my $crc = 0;
-       $crc ^= $_ foreach(unpack("C*", $res));
-    return $self->write_buf(stx() . $res . chr($crc));
-}
-
 sub send_cmd
 {
     my ($self, $len, $cmd, $str, @param) = @_;
@@ -3030,7 +2952,6 @@ send_enq:
 
     # wait reply
     my $byte = $self->read_byte($self->{TIMEOUT} * 2);
-    # check timeout
     unless(defined $byte)
     {
 	$self->{ERROR_CODE} = 255;
@@ -3053,6 +2974,10 @@ read_stx:
 	    goto read_stx;
 	}
 
+	# bug: fix double ack for long command (device_set_print_cliche)
+	goto read_stx if(ack() eq $byte);
+
+	# assert: stx only
 	unless(stx() eq $byte)
 	{
 	    $self->{ERROR_CODE} = 255;

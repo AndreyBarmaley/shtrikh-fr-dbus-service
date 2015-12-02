@@ -26,7 +26,7 @@ use POSIX qw(strftime);
 use Time::HiRes qw(gettimeofday);
 use CashRegister::ShtrihFR;
 
-my $version = "20151009";
+my $version = "20151030";
 my @ports = ( glob("/dev/ttyS*"), glob("/dev/ttyUSB*") );
 
 my $str_dbus_service = "ru.shtrih_m.fr";
@@ -252,7 +252,7 @@ dbus_method("device_set_print_barcode", ["int32", "string", "bool"], [["dict", "
 dbus_method("device_set_load_ext_graphics", ["int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
 dbus_method("device_set_print_ext_graphics", ["int32", "int32", "int32", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_set_print_line", ["int32", "int32", ["array", "byte"], "bool"], [["dict", "string", "string"]]);
-dbus_method("device_set_daily_report_dump_buffer", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_daily_report_damp_buffer", ["int32", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_set_print_daily_report_buffer", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_rowcount_printbuf", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_string_printbuf", ["int32", "int32"], [["dict", "string", "string"]]);
@@ -1416,7 +1416,7 @@ sub device_set_print_line
 	$self->{DEVICE}->set_print_line(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
-sub device_set_daily_report_dump_buffer
+sub device_set_daily_report_damp_buffer
 {
     my $self = shift;
 
