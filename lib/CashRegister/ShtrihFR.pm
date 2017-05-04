@@ -18,8 +18,8 @@ use strict;
 
 use constant
 {
-    MY_DRIVER_VERSION => 20151030,
-    FR_PROTOCOL_VERSION	=> 1.12
+    MY_DRIVER_VERSION => 20170427,
+    FR_PROTOCOL_VERSION	=> 1.99
 };
 
 use constant
@@ -129,6 +129,7 @@ use constant
     SET_CLEAR_PRINTBUF		=> 0xCA,
     GET_FR_IBM_STATUS_LONG	=> 0xD0,
     GET_FR_IBM_STATUS		=> 0xD1,
+    SET_OPEN_TURN		=> 0xE0,
     SET_OPEN_NONFISCAL_DOCUMENT	=> 0xE2,
     SET_CLOSE_NONFISCAL_DOCUMENT=> 0xE3,
     SET_PRINT_PROPS		=> 0xE4,
@@ -807,10 +808,11 @@ sub get_license
 
 sub set_write_table
 {
-    my ($self, $pass, $table, $col, $field, $data, undef) = @_;
+    my ($self, $pass, $table, $col, $field, $array_ref, undef) = @_;
 
     my $res = {};
-    my $buf = $self->send_cmd(9 + length($data), SET_WRITE_TABLE, "VCvCa*", $pass, $table, $col, $field, $data);
+    my $data = pack("C*", @{$array_ref});
+    my $buf = $self->send_cmd(9 + length $data, SET_WRITE_TABLE, "VCvCa*", $pass, $table, $col, $field, $data);
 
     $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
     $res->{ERROR_CODE} = $self->{ERROR_CODE};
@@ -1096,11 +1098,9 @@ sub get_structure_field
     {
 	my ($name, $type, $count, $last, undef) = unpack("a40CCa*", $buf);
 
-	$res->{TABLE_NAME} = Encode::decode($self->{ENCODE_TO}, $name);
-	$res->{FIELD_TYPE} = $type;
+	$res->{FIELD_NAME} = Encode::decode($self->{ENCODE_TO}, $name);
+	$res->{FIELD_TYPE} = $type ? "CHAR" : "BIN";
 	$res->{FIELD_SIZE} = $count;
-	$res->{FIELD_MIN_VALUE} = get_hexstr_from_binary_le(substr($last, 0, $count));
-	$res->{FIELD_MAX_VALUE} = get_hexstr_from_binary_le(substr($last, $count, $count));
     }
 
     return $res;
@@ -1824,7 +1824,8 @@ sub set_configuration_underdoc
     my ($self, $pass, $width_underdoc, $length_underdoc, $print_direction, $array_ref, undef) = @_;
 
     my $res = {};
-    my $buf = $self->send_cmd(209, SET_CONFIGURATION_UNDERDOC, "VvvCa199", $pass, $width_underdoc, $length_underdoc, $print_direction, @{$array_ref});
+    my $data = pack("C*", @{$array_ref});
+    my $buf = $self->send_cmd(209, SET_CONFIGURATION_UNDERDOC, "VvvCa199", $pass, $width_underdoc, $length_underdoc, $print_direction, $data);
 
     $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
     $res->{ERROR_CODE} = $self->{ERROR_CODE};
@@ -2317,10 +2318,11 @@ sub set_print_continue
 
 sub set_load_graphics
 {
-    my ($self, $pass, $linenum, $data, undef) = @_;
+    my ($self, $pass, $linenum, $array_ref, undef) = @_;
 
     my $res = {};
-    my $buf = $self->send_cmd(46, SET_LOAD_GRAPHICS, "VCa40", $pass, $linenum, @{$data});
+    my $data = pack("C*", @{$array_ref});
+    my $buf = $self->send_cmd(46, SET_LOAD_GRAPHICS, "VCa40", $pass, $linenum, $data);
 
     $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
     $res->{ERROR_CODE} = $self->{ERROR_CODE};
@@ -2382,10 +2384,11 @@ sub set_print_barcode
 
 sub set_load_ext_graphics
 {
-    my ($self, $pass, $linenum, $data, undef) = @_;
+    my ($self, $pass, $linenum, $array_ref, undef) = @_;
 
     my $res = {};
-    my $buf = $self->send_cmd(47, SET_LOAD_EXT_GRAPHICS, "Vva40", $pass, $linenum, @{$data});
+    my $data = pack("C*", @{$array_ref});
+    my $buf = $self->send_cmd(47, SET_LOAD_EXT_GRAPHICS, "Vva40", $pass, $linenum, $data);
 
     $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
     $res->{ERROR_CODE} = $self->{ERROR_CODE};
@@ -2424,10 +2427,11 @@ sub set_print_ext_graphics
 
 sub set_print_line
 {
-    my ($self, $pass, $repeats, $data, $wait, undef) = @_;
+    my ($self, $pass, $repeats, $array_ref, $wait, undef) = @_;
 
     my $res = {};
-    my $buf = $self->send_cmd(7 + scalar @{$data}, SET_PRINT_LINE, "Vva*", $pass, $repeats, @{$data});
+    my $data = pack("C*", @{$array_ref});
+    my $buf = $self->send_cmd(7 + length $data, SET_PRINT_LINE, "Vva*", $pass, $repeats, $data);
 
     $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
     $res->{ERROR_CODE} = $self->{ERROR_CODE};
@@ -2595,6 +2599,26 @@ sub get_fr_ibm_status
 	$res->{OPERATOR} = $oper;
 	$res->{STATUS} = get_hexdump($status);
 	$res->{FLAGS} = $flags;
+    }
+
+    return $res;
+}
+
+sub set_open_turn
+{
+    my ($self, $pass, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(5, SET_OPEN_TURN, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
     }
 
     return $res;
@@ -2826,10 +2850,11 @@ sub get_device_type
 
 sub set_extdev_command
 {
-    my ($self, $pass, $portnum, $data, undef) = @_;
+    my ($self, $pass, $portnum, $array_ref, undef) = @_;
 
     my $res = {};
-    my $buf = $self->send_cmd(6 + length($data), SET_EXT_DEVICE_COMMAND, "VCC*", $pass, $portnum, unpack("C*", $data));
+    my $data = pack("C*", @{$array_ref});
+    my $buf = $self->send_cmd(6 + length($data), SET_EXT_DEVICE_COMMAND, "VCa*", $pass, $portnum, $data);
 
     $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
     $res->{ERROR_CODE} = $self->{ERROR_CODE};
@@ -2940,6 +2965,18 @@ sub wait_default
     usleep($self->{TIMEOUT});
 }
 
+sub fix_command_delay
+{
+    my ($self, $cmd, undef) = @_;
+
+    return $self->{TIMEOUT} * 6 if($cmd == SET_PRINT_CLICHE);
+    return $self->{TIMEOUT} * 4 if($cmd == SET_CHECK_CLOSE);
+    return $self->{TIMEOUT} * 4 if($cmd == SET_SELL);
+    return $self->{TIMEOUT} * 4 if($cmd == SET_RETURNS_SALE);
+
+    return $self->{TIMEOUT} * 2;
+}
+
 sub send_cmd
 {
     my ($self, $len, $cmd, $str, @param) = @_;
@@ -2965,7 +3002,8 @@ send_enq:
     {
 	my $mJ = 0;
 read_stx:
-	$byte = $self->read_byte($self->{TIMEOUT} * 2);
+
+	$byte = $self->read_byte($self->fix_command_delay($cmd));
 	unless(defined $byte)
 	{
 	    $self->{ERROR_CODE} = 255;
@@ -3122,7 +3160,12 @@ sub get_hexstr8
 
 sub get_le_bigint5_from_string
 {
-    my $number = Math::BigInt->new(shift);
+    my $str = shift;
+
+    return pack("a5", 0)
+	unless(length $str);
+
+    my $number = Math::BigInt->new($str);
     my @bytes = ();
 
     for(0 .. 4)

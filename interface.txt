@@ -1,5 +1,5 @@
 #
-# usage docs: ftp://ftp.shtrih-m.ru/download/FR/shtrih-fr-k/Protocol/Protocol_FP_1.7.pdf
+# usage docs: ftp://ftp.shtrih-m.ru/download/FR/Doc/ProtocolFP_1.12.pdf
 #
 
 # 1. tools command:
@@ -140,7 +140,7 @@ params: password, int32
 params: table, int32
 params: column, int32
 params: field, int32
-params: data, string
+params: data, ["array", "byte"]
 return: dict["string", "string"]
 
 command: 0x1F
@@ -887,7 +887,7 @@ params: wait, bool
 return: dict["string", "string"]
 
 command: 0xC6
-call:   set_daily_report_dump_buffer
+call:   set_daily_report_damp_buffer
 params: password, int32
 return: dict["string", "string"]
 
@@ -920,6 +920,11 @@ return: dict["string", "string"]
 
 command: 0xD1
 call:   device_get_fr_ibm_status
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xE0
+call:   device_set_open_turn
 params: password, int32
 return: dict["string", "string"]
 
@@ -989,5 +994,5 @@ command: 0xFD
 call:   device_set_extdev_command
 params: password, int32
 params: portnum, int32
-params: data, string
+params: data, ["array", "byte"]
 return: dict["string", "string"]

@@ -26,7 +26,7 @@ use POSIX qw(strftime);
 use Time::HiRes qw(gettimeofday);
 use CashRegister::ShtrihFR;
 
-my $version = "20151030";
+my $version = "20170427";
 my @ports = ( glob("/dev/ttyS*"), glob("/dev/ttyUSB*") );
 
 my $str_dbus_service = "ru.shtrih_m.fr";
@@ -169,7 +169,7 @@ dbus_method("device_get_cache_register", ["int32", "int32"], [["dict", "string",
 dbus_method("device_get_operational_register", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_license", ["int32", "string"], [["dict", "string", "string"]]);
 dbus_method("device_get_license", ["int32"], [["dict", "string", "string"]]);
-dbus_method("device_set_write_table", ["int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_write_table", ["int32", "int32", "int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
 dbus_method("device_get_read_table", ["int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_decimal_point", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_current_time", ["int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
@@ -259,6 +259,7 @@ dbus_method("device_get_string_printbuf", ["int32", "int32"], [["dict", "string"
 dbus_method("device_set_clear_printbuf", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_fr_ibm_status_long", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_fr_ibm_status", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_open_turn", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_open_nonfiscal_document", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_close_nonfiscal_document", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_print_props", ["int32", "int32", "string", "bool"], [["dict", "string", "string"]]);
@@ -270,7 +271,7 @@ dbus_method("device_set_flap_control", ["int32", "int32"], [["dict", "string", "
 dbus_method("device_set_check_getout", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_password_cto", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_type", [], [["dict", "string", "string"]]);
-dbus_method("device_set_extdev_command", ["int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_extdev_command", ["int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
 
 # connect
 $dbus_object->connect_to_signal("service_shutdown", sub { $dbus_object->service_shutdown(); } );
@@ -1491,6 +1492,17 @@ sub device_get_fr_ibm_status
 
     return $self->device_is_online() ?
 	$self->{DEVICE}->get_fr_ibm_status(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_set_open_turn
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_open_turn(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_open_nonfiscal_document
