@@ -1,4 +1,6 @@
 [D-BUS Service]
 Name=ru.shtrih_m.fr.kassa1
 Exec=/opt/git/shtrih_fr/dbus/shtrih_fr.service -s ru.shtrih_m.fr.kassa1
-User=root
+#Exec=/opt/git/shtrih_fr/dbus/shtrih_fr.service -s ru.shtrih_m.fr.kassa1 -d /dev/ttyS0 -p /var/tmp/shtrih_fr.pid -l /var/tmp/shtrih_fr.log
+User=serial
+#User=root
