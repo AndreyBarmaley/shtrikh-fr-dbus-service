@@ -15,9 +15,12 @@ TEMPLATE = app
 
 SOURCES += main.cpp\
         mainwindow.cpp \
-    dbuskkm.cpp
+    dbuskkm.cpp \
+    options.cpp
 
 HEADERS  += mainwindow.h \
-    dbuskkm.h
+    dbuskkm.h \
+    options.h
 
-FORMS    += mainwindow.ui
+FORMS    += mainwindow.ui \
+    options.ui

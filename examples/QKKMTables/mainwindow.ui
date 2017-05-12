@@ -42,10 +42,10 @@
      <x>0</x>
      <y>0</y>
      <width>523</width>
-     <height>21</height>
+     <height>20</height>
     </rect>
    </property>
-   <widget class="QMenu" name="menu_File">
+   <widget class="QMenu" name="menuFile">
     <property name="title">
      <string>&amp;File</string>
     </property>
@@ -53,7 +53,7 @@
     <addaction name="separator"/>
     <addaction name="actionExit"/>
    </widget>
-   <addaction name="menu_File"/>
+   <addaction name="menuFile"/>
   </widget>
   <widget class="QToolBar" name="mainToolBar">
    <attribute name="toolBarArea">
@@ -97,6 +97,22 @@
     <hint type="destinationlabel">
      <x>199</x>
      <y>149</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>actionOptions</sender>
+   <signal>triggered()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>on_menuOptions_show()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>261</x>
+     <y>163</y>
     </hint>
    </hints>
   </connection>

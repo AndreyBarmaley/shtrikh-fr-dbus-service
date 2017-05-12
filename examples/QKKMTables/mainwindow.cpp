@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "dbuskkm.h"
+#include "options.h"
 
 #include <QMap>
 #include <QList>
@@ -13,27 +14,28 @@
 #include <QMessageBox>
 
 #include <QDebug>
+#define VERSION 20170502
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow), kkm(NULL), currentTable(NULL), codec(NULL), tableWidgetAccepted(false)
 {
     ui->setupUi(this);
+    setWindowTitle(QString("KKM Tables, version: ").append(QString::number(VERSION)));
 
-    QString service = "ru.shtrih_m.fr.kassa1";
-    QString path = "/ru/shtrih_m/fr/kassa1/object";
-    QString interface = "ru.shtrih_m.fr.kassa1.interface";
-    kkmCharset = "CP1251";
-    kkmPassword = 30;
+    readSettings();
 
-    int tablesCount = 24;
     int error = 0;
-
     codec = QTextCodec::codecForName(kkmCharset.toStdString().c_str());
-    kkm = new DBusKKM(service, path, interface);
 
-    if(kkm->isValid())
-    for(int tid = 1; tid <= tablesCount; ++tid)
+    while(1)
+    {
+        kkm = new DBusKKM(dbusService, dbusPath, dbusInterface);
+        if(kkm->isValid()) break;
+        if(showOptions() == QDialog::Rejected) break;
+    }
+
+    for(int tid = 1; tid <= kkmTables; ++tid)
     {
         auto tableMap = kkm->call("device_get_structure_table", QList<QVariant>() << kkmPassword << tid, &error);
         if(error) break;
@@ -48,6 +50,19 @@ MainWindow::MainWindow(QWidget *parent) :
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::readSettings(void)
+{
+    QSettings settings("dc.baikal.ru", "KKMTables");
+
+    dbusService = settings.value("dbus service", dbusService).toString();
+    dbusPath = settings.value("dbus path", dbusPath).toString();
+    dbusInterface = settings.value("dbus interface", dbusInterface).toString();
+
+    kkmPassword = settings.value("kkm password", kkmPassword).toInt();
+    kkmTables = settings.value("kkm tables count", kkmTables).toInt();
+    kkmCharset = settings.value("kkm charset", kkmCharset).toString();
 }
 
 void MainWindow::applyTableChanges(void)
@@ -235,6 +250,31 @@ void MainWindow::on_tableWidget_cellChanged(int row, int column)
     {
         cellsChanged << QPair<int, int>(row, column);
     }
+}
+
+int MainWindow::showOptions(void)
+{
+    Options dialog(*this, this);
+    int result = dialog.exec();
+
+    if(result == QDialog::Accepted)
+    {
+        const settings_t & s = dialog.result();
+
+        dbusService = s.dbusService;
+        dbusInterface = s.dbusInterface;
+        dbusPath = s.dbusPath;
+
+        kkmPassword = s.kkmPassword;
+        kkmTables = s.kkmTables;
+        kkmCharset = s.kkmCharset;
+    }
+    return result;
+}
+
+void MainWindow::on_menuOptions_show(void)
+{
+    showOptions();
 }
 
 void MainWindow::closeEvent(QCloseEvent*)
