@@ -26,7 +26,7 @@ use POSIX qw(strftime);
 use Time::HiRes qw(gettimeofday);
 use CashRegister::ShtrihFR;
 
-my $version = "20170427";
+my $version = "20170525";
 my @ports = ( glob("/dev/ttyS*"), glob("/dev/ttyUSB*") );
 
 my $str_dbus_service = "ru.shtrih_m.fr";
@@ -191,6 +191,15 @@ dbus_method("device_get_daily_report", ["int32", "bool"], [["dict", "string", "s
 dbus_method("device_get_daily_report_with_dump", ["int32", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_get_sections_report", ["int32", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_get_taxes_report", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_get_cashiers_report", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_get_hours_report", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_get_goods_report", ["int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_add_update_good", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_get_read_good", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_delete_good", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_graphics512_scale", ["int32", "int32", "int32", "int32", "int32", "int32", "bool"], [["dict", "string", "string"]]);
+dbus_method("device_set_load_graphics512", ["int32", "int32", "int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
+dbus_method("device_set_print_graphics_scale", ["int32", "int32", "int32", "int32", "int32", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_set_adding_amount", ["int32", "string"], [["dict", "string", "string"]]);
 dbus_method("device_get_payment_amount", ["int32", "string"], [["dict", "string", "string"]]);
 dbus_method("device_set_print_cliche", ["int32", "bool"], [["dict", "string", "string"]]);
@@ -854,6 +863,105 @@ sub device_get_taxes_report
 
     return $self->device_is_online() ?
 	$self->{DEVICE}->get_taxes_report(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_cashiers_report
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_cashiers_report(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_hours_report
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_hours_report(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_goods_report
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_goods_report(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_set_add_update_good
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_add_update_good(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_read_good
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_read_good(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_set_delete_good
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_delete_good(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_set_print_graphics512_scale
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_graphics512_scale(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_set_load_graphics512
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_load_graphics512(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_set_print_graphics_scale
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_graphics_scale(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_adding_amount

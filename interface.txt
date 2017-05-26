@@ -278,6 +278,79 @@ params: password, int32
 params: wait, bool
 return: dict["string", "string"]
 
+command: 0x44
+call:   device_get_cashiers_report
+params: password, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x45
+call:   device_get_hours_report
+params: password, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x46
+call:   device_get_goods_report
+params: password, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x4a
+call:   device_set_add_update_good
+params: password, int32
+params: good id, int32
+params: department, int32
+params: tax 1, int32
+params: tax 2, int32
+params: tax 3, int32
+params: tax 4, int32
+params: text, string	# is 40 byte
+return: dict["string", "string"]
+
+command: 0x4b
+call:   device_get_read_good
+params: password, int32
+params: good id, int32
+return: dict["string", "string"]
+
+command: 0x4c
+call:   device_set_delete_good
+params: password, int32
+params: good id, int32
+return: dict["string", "string"]
+
+command: 0x4d
+call:   device_set_print_graphics512_scale
+params: password, int32
+params: first line, int32
+params: last line, int32
+params: vscale, int32
+params: hscale, int32
+params: flags, int32
+params: wait, bool
+return: dict["string", "string"]
+
+command: 0x4e
+call:   device_set_load_graphics512
+params: password, int32
+params: line length, int32
+params: start line number, int32
+params: next lines count, int32
+params: buffer type, int32
+params: data, ["array", "byte"]
+return: dict["string", "string"]
+
+command: 0x4f
+call:   device_set_print_graphics_scale
+params: password, int32
+params: first line, int32
+params: last line, int32
+params: vscale, int32
+params: hscale, int32
+params: wait, bool
+return: dict["string", "string"]
+
 command: 0x50
 call:   device_set_adding_amount
 params: password, int32

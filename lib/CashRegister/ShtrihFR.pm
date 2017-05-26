@@ -18,7 +18,7 @@ use strict;
 
 use constant
 {
-    MY_DRIVER_VERSION => 20170427,
+    MY_DRIVER_VERSION => 20170525,
     FR_PROTOCOL_VERSION	=> 1.99
 };
 
@@ -66,6 +66,16 @@ use constant
     GET_DAILY_REPORT_DAMP	=> 0x41,
     GET_SECTIONS_REPORT		=> 0x42,
     GET_TAXES_REPORT		=> 0x43,
+    GET_CASHIERS_REPORT		=> 0x44,
+    GET_HOURS_REPORT		=> 0x45,
+    GET_GOODS_REPORT		=> 0x46,
+    SET_ADD_UPDATE_GOOD		=> 0x4A,
+    GET_READ_GOOD		=> 0x4B,
+    SET_DELETE_GOOD		=> 0x4C,
+    SET_PRINT_GRAPHICS512_SCALE	=> 0x4D,
+    SET_LOAD_GRAPHICS512	=> 0x4E,
+    SET_PRINT_GRAPHICS_SCALE	=> 0x4F,
+
     SET_ADDING_AMOUNT		=> 0x50,
     GET_PAYMENT_AMOUNT		=> 0x51,
     SET_PRINT_CLICHE		=> 0x52,
@@ -1233,6 +1243,206 @@ sub get_taxes_report
 	$res->{OPERATOR} = $oper;
 
 	$self->printing_wait($pass) if($wait);
+    }
+
+    return $res;
+}
+
+sub get_cashiers_report
+{
+    my ($self, $pass, $wait, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_CASHIERS_REPORT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
+
+	$self->printing_wait($pass) if($wait);
+    }
+
+    return $res;
+}
+
+sub get_hours_report
+{
+    my ($self, $pass, $wait, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_HOURS_REPORT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
+
+	$self->printing_wait($pass) if($wait);
+    }
+
+    return $res;
+}
+
+sub get_goods_report
+{
+    my ($self, $pass, $wait, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_GOODS_REPORT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
+
+	$self->printing_wait($pass) if($wait);
+    }
+
+    return $res;
+}
+
+sub set_add_update_good
+{
+    my ($self, $pass, $goodid, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(71, SET_ADD_UPDATE_GOOD, "Vva5CCCCCA54", $pass, $goodid, get_le_bigint5_from_string($price),
+		$department, $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
+    }
+
+    return $res;
+}
+
+sub get_read_good
+{
+    my ($self, $pass, $goodid, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(7, GET_READ_GOOD, "Vv", $pass, $goodid);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = unpack("Ca5CCCCCA54", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{PRICE} = get_string_from_le_bigint5($price);
+	$res->{DEPARTMENT} = $department;
+	$res->{TAX1} = $tax1;
+	$res->{TAX2} = $tax2;
+	$res->{TAX3} = $tax3;
+	$res->{TAX4} = $tax4;
+	$res->{TEXT} = $text;
+    }
+
+    return $res;
+}
+
+sub set_delete_good
+{
+    my ($self, $pass, $goodid, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(7, SET_DELETE_GOOD, "Vv", $pass, $goodid);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
+    }
+
+    return $res;
+}
+
+sub set_print_graphics512_scale
+{
+    my ($self, $pass, $first, $last, $vscale, $hscale, $flags, $wait, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(12, SET_PRINT_GRAPHICS512_SCALE, "VvvCCC", $pass, $first, $last, $vscale, $hscale, $flags);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+        my ($oper, undef) = unpack("C", $buf);
+        $res->{OPERATOR} = $oper;
+
+        $self->printing_wait($pass) if($wait);
+    }
+
+    return $res;
+}
+
+sub set_load_graphics512
+{
+    my ($self, $pass, $linelength, $startnumberline, $nextcountline, $buffertype, $array_ref, undef) = @_;
+
+    my $res = {};
+    my $data = pack("C*", @{$array_ref});
+    my $buf = $self->send_cmd(11 + length $data, SET_LOAD_GRAPHICS512, "VCvvCa*", $pass, $linelength, $startnumberline, $nextcountline, $buffertype, $data);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+        my ($oper, undef) = unpack("C", $buf);
+        $res->{OPERATOR} = $oper;
+    }
+
+    return $res;
+}
+
+sub set_print_graphics_scale
+{
+    my ($self, $pass, $first, $last, $vscale, $hscale, $wait, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(9, SET_PRINT_GRAPHICS_SCALE, "VCCCC", $pass, $first, $last, $vscale, $hscale);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+        my ($oper, $through_doc, undef) = unpack("Cv", $buf);
+        $res->{OPERATOR} = $oper;
+	$res->{THROUGH_DOC_NUMBER} = $through_doc;
+
+        $self->printing_wait($pass) if($wait);
     }
 
     return $res;
