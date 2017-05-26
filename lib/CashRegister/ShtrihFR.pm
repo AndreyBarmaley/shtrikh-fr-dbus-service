@@ -121,6 +121,7 @@ use constant
     SET_REVERSAL_ALLOWANCE	=> 0x8B,
     GET_DOCUMENT_REPEAT		=> 0x8C,
     SET_CHECK_OPEN		=> 0x8D,
+    SET_CHECK_CLOSE_EXT		=> 0x8E,
 
     #
     # skip commands: 0x90 - 0x9F
@@ -138,6 +139,7 @@ use constant
     GET_ROWCOUNT_PRINTBUF	=> 0xC8,
     GET_STRING_PRINTBUF		=> 0xC9,
     SET_CLEAR_PRINTBUF		=> 0xCA,
+
     GET_FR_IBM_STATUS_LONG	=> 0xD0,
     GET_FR_IBM_STATUS		=> 0xD1,
     SET_OPEN_TURN		=> 0xE0,
@@ -2523,6 +2525,36 @@ sub set_check_open
     return $res;
 }
 
+sub set_check_close_ext
+{
+    # cash_sum, sum_type2 - sum_type16 is big int string
+    my ($self, $pass, $cash_sum, $sum_type2, $sum_type3, $sum_type4, $sum_type5, $sum_type6, $sum_type7, $sum_type8, $sum_type9,
+	$sum_type10, $sum_type11, $sum_type12, $sum_type13, $sum_type14, $sum_type15, $sum_type16,
+	$discount, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(131, SET_CHECK_CLOSE_EXT, "Va5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5vCCCCA40", $pass,
+	get_le_bigint5_from_string($cash_sum),
+	get_le_bigint5_from_string($sum_type2), get_le_bigint5_from_string($sum_type3), get_le_bigint5_from_string($sum_type4),
+	get_le_bigint5_from_string($sum_type5), get_le_bigint5_from_string($sum_type6), get_le_bigint5_from_string($sum_type7),
+	get_le_bigint5_from_string($sum_type8), get_le_bigint5_from_string($sum_type9), get_le_bigint5_from_string($sum_type10),
+	get_le_bigint5_from_string($sum_type11), get_le_bigint5_from_string($sum_type12), get_le_bigint5_from_string($sum_type13),
+	get_le_bigint5_from_string($sum_type14), get_le_bigint5_from_string($sum_type15), get_le_bigint5_from_string($sum_type16),
+	get_binary_discout_check($discount), $tax1, $tax2, $tax3, $tax4, $self->encode_string($text));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+        my ($oper, $change, undef) = unpack("Ca5", $buf);
+        $res->{OPERATOR} = $oper;
+        $res->{SHORT_CHANGE} = get_string_from_le_bigint5($change);
+    }
+
+    return $res;
+}
 
 
 
