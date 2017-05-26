@@ -75,7 +75,6 @@ use constant
     SET_PRINT_GRAPHICS512_SCALE	=> 0x4D,
     SET_LOAD_GRAPHICS512	=> 0x4E,
     SET_PRINT_GRAPHICS_SCALE	=> 0x4F,
-
     SET_ADDING_AMOUNT		=> 0x50,
     GET_PAYMENT_AMOUNT		=> 0x51,
     SET_PRINT_CLICHE		=> 0x52,
@@ -91,6 +90,8 @@ use constant
     GET_FISCAL_REPORT_BY_TOUR	=> 0x67,
     SET_BREAK_FULL_REPORT	=> 0x68,
     GET_FISCALIZATION_PARAMS	=> 0x69,
+    GET_CHECK_FP_BROKEN_RECORDS	=> 0x6A,
+    GET_RETURN_ERROR_NAME	=> 0x6B,
     SET_OPEN_FISCAL_UNDERDOC	=> 0x70,
     SET_OPEN_STD_FISCAL_UNDERDOC	=> 0x71,
     SET_FORMING_OPERATION_UNDERDOC	=> 0x72,
@@ -1765,6 +1766,49 @@ sub get_fiscalization_params
 	$res->{INN_NUMBER} = get_hexnum_from_binary_le($inn);
 	$res->{TOUR_NUMBER_AFTER_FICAL} = $tour_number;
 	$res->{FIRST_TOUR_DATE} = format_date(2000 + $fiscal_year, $fiscal_month, $fiscal_day);
+    }
+
+    return $res;
+}
+
+sub get_check_fp_broken_records
+{
+    my ($self, $pass, $typerec, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(6, GET_CHECK_FP_BROKEN_RECORDS, "VC", $pass, $typerec);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, $broken, undef) = unpack("Cv", $buf);
+
+	$res->{OPERATOR} = $oper;
+	$res->{BROKEN_RECORDS} = $broken;
+    }
+
+    return $res;
+}
+
+sub get_return_error_name
+{
+    my ($self, $errorcode, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(2, GET_RETURN_ERROR_NAME, "C", $errorcode);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($error_name, undef) = unpack("a*", $buf);
+
+	$res->{ERROR_NAME} = Encode::decode($self->{ENCODE_TO}, $error_name);
     }
 
     return $res;

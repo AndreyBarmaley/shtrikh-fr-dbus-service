@@ -215,6 +215,8 @@ dbus_method("device_get_fiscal_report_by_date", ["int32", "int32", "int32", "int
 dbus_method("device_get_fiscal_report_by_tour", ["int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_break_full_report", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_fiscalization_params", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_check_fp_broken_records", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_return_error_name", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_open_fiscal_underdoc", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
     "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_standard_open_fiscal_underdoc", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
@@ -1138,6 +1140,28 @@ sub device_set_open_fiscal_underdoc
 
     return $self->device_is_online() ?
 	$self->{DEVICE}->set_open_fiscal_underdoc(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_check_fp_broken_records
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_check_fp_broken_records(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_return_error_name
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_return_error_name(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_open_standard_fiscal_underdoc

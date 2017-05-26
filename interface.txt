@@ -446,6 +446,17 @@ params: password, int32
 params: number, int32
 return: dict["string", "string"]
 
+command: 0x6a
+call:   device_get_check_fp_broken_records
+params: password, int32
+params: record type, int32
+return: dict["string", "string"]
+
+command: 0x6b
+call:   device_get_return_error_name
+params: error code, int32
+return: dict["string", "string"]
+
 command: 0x70
 call:   device_set_open_fiscal_underdoc
 params: password, int32
