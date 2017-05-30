@@ -1107,3 +1107,24 @@ params: password, int32
 params: portnum, int32
 params: data, ["array", "byte"]
 return: dict["string", "string"]
+
+command: 0xFF01
+call:   device_get_fn_status
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xFF02
+call:   device_get_fn_number
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xFF03
+call:   device_get_fn_duration
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xFF04
+call:   device_get_fn_version
+params: password, int32
+return: dict["string", "string"]
+

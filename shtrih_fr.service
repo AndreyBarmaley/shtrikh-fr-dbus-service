@@ -286,6 +286,10 @@ dbus_method("device_set_check_getout", ["int32", "int32"], [["dict", "string", "
 dbus_method("device_set_password_cto", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_type", [], [["dict", "string", "string"]]);
 dbus_method("device_set_extdev_command", ["int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
+dbus_method("device_get_fn_status", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_fn_number", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_fn_duration", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_fn_version", ["int32"], [["dict", "string", "string"]]);
 
 # connect
 $dbus_object->connect_to_signal("service_shutdown", sub { $dbus_object->service_shutdown(); } );
@@ -1781,4 +1785,48 @@ sub device_set_extdev_command
 
     return $self->device_is_online() ?
 	$self->{DEVICE}->set_extdev_command(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_fn_status
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fn_status(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_fn_number
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fn_number(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_fn_duration
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fn_duration(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_fn_version
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fn_version(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }

@@ -159,6 +159,14 @@ use constant
 
 use constant
 {
+    FF_GET_FN_STATUS		=> 0x01,
+    FF_GET_FN_NUMBER		=> 0x02,
+    FF_GET_FN_DURATION		=> 0x03,
+    FF_GET_FN_VERSION		=> 0x04
+};
+
+use constant
+{
     CMD_STX     => 0x02,
     CMD_ENQ     => 0x05,
     CMD_ACK     => 0x06,
@@ -3155,6 +3163,98 @@ sub set_extdev_command
     return $res;
 }
 
+sub get_fn_status
+{
+    my ($self, $pass, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd_ff(6, FF_GET_FN_STATUS, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($mode, $curdoc, $datadoc, $status, $flags,
+	    $date_year, $date_month, $date_day, $time_hour, $time_min, $fn_number, $fd_last, undef) = unpack("CCCCCCCCCCa16V", $buf);
+	$res->{FN_NUMER} = $fn_number;
+	$res->{FD_LAST} = $fd_last;
+	$res->{FLAG_LIFE_STATUS} = get_hexstr2($mode);
+	$res->{FLAG_CURRENT_DOCUMENT} = get_hexstr2($curdoc);
+	$res->{FLAG_DOCUMENT_DATA} = get_hexstr2($datadoc);
+	$res->{FLAG_TURN_STATUS} = get_hexstr2($status);
+	$res->{FLAG_WARNINGS} = get_hexstr2($flags);
+	$res->{DATE} = format_date(2000 + $date_year, $date_month, $date_day);
+	$res->{TIME} = format_time($time_hour, $time_min, 0);
+    }
+
+    return $res;
+}
+
+sub get_fn_number
+{
+    my ($self, $pass, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd_ff(6, FF_GET_FN_NUMBER, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, $fn_number, undef) = unpack("Ca16", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{FN_NUMER} = $fn_number;
+    }
+
+    return $res;
+}
+
+sub get_fn_duration
+{
+    my ($self, $pass, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd_ff(6, FF_GET_FN_DURATION, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, $date_year, $date_month, $date_day, undef) = unpack("CCCC", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{FN_DURATION} = format_date(2000 + $date_year, $date_month, $date_day);
+    }
+
+    return $res;
+}
+
+sub get_fn_version
+{
+    my ($self, $pass, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd_ff(6, FF_GET_FN_VERSION, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($version, $type, undef) = unpack("a16C", $buf);
+	$res->{FN_VERSION} = Encode::decode($self->{ENCODE_TO}, $version);
+	$res->{FN_TYPE} = get_hexstr2($type);
+    }
+
+    return $res;
+}
+
 #
 # private
 #
@@ -3311,24 +3411,15 @@ read_stx:
 	}
 
 	$byte = $self->read_byte();
-	unless(defined $byte)
-	{
-	    goto repeat_cmd;
-	}
+	goto repeat_cmd unless(defined $byte);
 	my $len = $byte;
 
 	$byte = $self->read_byte();
-	unless(defined $byte)
-	{
-	    goto repeat_cmd;
-	}
+	goto repeat_cmd unless(defined $byte);
 	my $cmd = $byte;
 
 	$byte = $self->read_byte();
-	unless(defined $byte)
-	{
-	    goto repeat_cmd;
-	}
+	goto repeat_cmd unless(defined $byte);
 	my $err = $byte;
 
 	my $res = 2 < ord($len) ? $self->read_buf(ord($len) - 2) : "";
@@ -3375,6 +3466,162 @@ repeat_cmd:
 	my $mI = 0;
 send_stx:
 	my $res = pack("CC" . $str, $len, $cmd, @param);
+	# and crc to tail
+	my $crc = 0;
+	   $crc ^= $_ foreach(unpack("C*", $res));
+	my $msg = stx() . $res . chr($crc);
+	my $count = $self->write_buf($msg);
+
+	if($count != length($msg))
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "send stx error, $count != " . length($msg);
+	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    return 0;
+	}
+
+	$byte = $self->read_byte($self->{TIMEOUT} * 2);
+	# check timeout
+	goto send_enq unless(defined $byte);
+
+	if(ack() eq $byte)
+	{
+	    goto read_stx;
+	}
+
+	if($mI < 10)
+	{
+	    $mI++;
+	    goto send_stx;
+	}
+	else
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "send stx: device not reply, 10 times";
+	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    return 0;
+	}
+    }
+
+    $self->{ERROR_CODE} = 255;
+    $self->{ERROR_MESSAGE} = "reply unknown: " . get_hexstr2($byte);
+    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+
+    goto send_enq;
+}
+
+sub send_cmd_ff
+{
+    my ($self, $len, $cmd, $str, @param) = @_;
+
+send_enq:
+    usleep(1000); # 1 ms
+
+    # send ENQ
+    return 0 unless($self->send_enq());
+
+    # wait reply
+    my $byte = $self->read_byte($self->{TIMEOUT} * 2);
+    unless(defined $byte)
+    {
+	$self->{ERROR_CODE} = 255;
+	$self->{ERROR_MESSAGE} = "device not reply";
+	warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	return 0;
+    }
+
+    # is ACK
+    if(ack() eq $byte)
+    {
+	my $mJ = 0;
+read_stx:
+
+	$byte = $self->read_byte($self->fix_command_delay($cmd));
+	unless(defined $byte)
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "wait stx timeout";
+	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    goto read_stx;
+	}
+
+	# bug: fix double ack for long command (device_set_print_cliche)
+	goto read_stx if(ack() eq $byte);
+
+	# assert: stx only
+	unless(stx() eq $byte)
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "unknown stx: " . get_hexstr2($byte);
+	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    return 0;
+	}
+
+	$byte = $self->read_byte();
+	goto repeat_cmd unless(defined $byte);
+	my $len = $byte;
+
+	# hight command byte
+	$byte = $self->read_byte();
+	goto repeat_cmd unless(defined $byte);
+	my $cmd1 = $byte;
+
+	# low command byte
+	$byte = $self->read_byte();
+	goto repeat_cmd unless(defined $byte);
+	my $cmd2 = $byte;
+
+	$byte = $self->read_byte();
+	unless(defined $byte)
+	{
+	    goto repeat_cmd;
+	}
+	my $err = $byte;
+
+	my $res = 3 < ord($len) ? $self->read_buf(ord($len) - 3) : "";
+	my $crc1 = $self->read_byte();
+	# calc crc
+	my $crc2 = $len ^ $cmd1 ^ $err;
+	   $crc2 ^= $_ foreach(split('', $res));
+
+	# check crc
+	if($crc1 == $crc2)
+	{
+	    $self->send_ack();
+	    $self->{ERROR_CODE} = ord($err);
+	    $self->{ERROR_MESSAGE} = 0 < ord($err) ? $self->get_message_error(ord($err)) : "";
+
+	    return $res;
+	}
+	else
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "stx crc error";
+    	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    $self->send_naq();
+	}
+
+repeat_cmd:
+	if($mJ < 10)
+	{
+	    $mJ ++;
+	    goto send_enq;
+	}
+	else
+	{
+	    $self->{ERROR_CODE} = 255;
+	    $self->{ERROR_MESSAGE} = "read stx: device not reply, 10 times";
+	    warn(__PACKAGE__, ": ", $self->{ERROR_MESSAGE}) if($self->{DEBUG});
+	    return 0;
+	}
+    }
+
+    # is NAK
+    if(nak() eq $byte)
+    {
+	my $mI = 0;
+send_stx:
+	my $res = pack("CCC" . $str, $len, 0xFF, $cmd, @param);
 	# and crc to tail
 	my $crc = 0;
 	   $crc ^= $_ foreach(unpack("C*", $res));
