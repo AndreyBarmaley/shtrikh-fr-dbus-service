@@ -18,7 +18,7 @@ use strict;
 
 use constant
 {
-    MY_DRIVER_VERSION => 20170525,
+    MY_DRIVER_VERSION => 20170531,
     FR_PROTOCOL_VERSION	=> 1.99
 };
 
@@ -139,6 +139,11 @@ use constant
     GET_ROWCOUNT_PRINTBUF	=> 0xC8,
     GET_STRING_PRINTBUF		=> 0xC9,
     SET_CLEAR_PRINTBUF		=> 0xCA,
+    SET_PRINT_BARCODE_PRINTER	=> 0xCB,
+    SET_CHECK_CLOSE_RETURN_KPK	=> 0xCC,
+    GET_EKLZ_ACTIVATION_PARAMS	=> 0xCD,
+    GET_RANDOM_SEQUENCE		=> 0xCE,
+    SET_AUTHENTICATION		=> 0xCF,
 
     GET_FR_IBM_STATUS_LONG	=> 0xD0,
     GET_FR_IBM_STATUS		=> 0xD1,
@@ -162,7 +167,9 @@ use constant
     FF_GET_FN_STATUS		=> 0x01,
     FF_GET_FN_NUMBER		=> 0x02,
     FF_GET_FN_DURATION		=> 0x03,
-    FF_GET_FN_VERSION		=> 0x04
+    FF_GET_FN_VERSION		=> 0x04,
+    FF_SET_START_OPEN_TURN	=> 0x41,
+    FF_SET_START_CLOSE_TURN	=> 0x42
 };
 
 use constant
@@ -2830,11 +2837,72 @@ sub set_clear_printbuf
     my ($self, $pass, undef) = @_;
 
     my $res = {};
-    my $buf = $self->send_cmd(7, SET_CLEAR_PRINTBUF, "V", $pass);
+    my $buf = $self->send_cmd(5, SET_CLEAR_PRINTBUF, "V", $pass);
 
     $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
     $res->{ERROR_CODE} = $self->{ERROR_CODE};
     $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    return $res;
+}
+
+sub set_print_barcode_printer
+{
+    my ($self, $pass, $height, $width, $hr1_pos, $hr1_font, $type, $array_ref, undef) = @_;
+
+    my $res = {};
+    my $data = pack("C48", @{$array_ref});
+    my $buf = $self->send_cmd(10 + length($data), SET_PRINT_BARCODE_PRINTER, "VCCCCCa*", $pass, $height, $width, $hr1_pos, $hr1_font, $type, $data);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
+    }
+
+    return $res;
+}
+
+#    SET_CHECK_CLOSE_RETURN_KPK
+#    GET_EKLZ_ACTIVATION_PARAMS
+
+sub get_random_sequence
+{
+    my ($self, $pass, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_RANDOM_SEQUENCE, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($oper, $sequence, undef) = unpack("Ca16", $buf);
+	$res->{OPERATOR} = $oper;
+	$res->{RANDOM_SEQUENCE} = get_hexdump($sequence);
+    }
+
+    return $res;
+}
+
+sub set_authentication
+{
+    my ($self, $pass, $code, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd(5, GET_RANDOM_SEQUENCE, "Va16", $pass, $code);
+
+    if($buf)
+    {
+	my ($oper, undef) = unpack("C", $buf);
+	$res->{OPERATOR} = $oper;
+    }
 
     return $res;
 }
@@ -3251,6 +3319,34 @@ sub get_fn_version
 	$res->{FN_VERSION} = Encode::decode($self->{ENCODE_TO}, $version);
 	$res->{FN_TYPE} = get_hexstr2($type);
     }
+
+    return $res;
+}
+
+sub set_start_open_turn
+{
+    my ($self, $pass, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd_ff(6, FF_SET_START_OPEN_TURN, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    return $res;
+}
+
+sub set_start_close_turn
+{
+    my ($self, $pass, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd_ff(6, FF_SET_START_CLOSE_TURN, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }

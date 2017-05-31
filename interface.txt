@@ -1024,6 +1024,28 @@ call:   device_set_clear_printbuf
 params: password, int32
 return: dict["string", "string"]
 
+command: 0xCB
+call:   device_set_print_barcode_printer
+params: password, int32
+params: barcode height, int32
+params: barcode width, int32
+params: hr1 position, int32
+params: hr1 font, int32
+params: barcode type, int32
+params: data, ["array", "byte"]
+return: dict["string", "string"]
+
+command: 0xCE
+call:   device_get_random_sequence
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xCE
+call:   device_set_authentication
+params: password, int32
+params: authentication code, string
+return: dict["string", "string"]
+
 command: 0xD0
 call:   device_get_fr_ibm_status_long
 params: password, int32
@@ -1128,3 +1150,12 @@ call:   device_get_fn_version
 params: password, int32
 return: dict["string", "string"]
 
+command: 0xFF41
+call:   device_set_start_open_turn
+params: password, int32
+return: dict["string", "string"]
+
+command: 0xFF42
+call:   device_set_start_close_turn
+params: password, int32
+return: dict["string", "string"]

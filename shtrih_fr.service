@@ -26,7 +26,7 @@ use POSIX qw(strftime);
 use Time::HiRes qw(gettimeofday);
 use CashRegister::ShtrihFR;
 
-my $version = "20170525";
+my $version = "20170531";
 my @ports = ( glob("/dev/ttyS*"), glob("/dev/ttyUSB*") );
 
 my $str_dbus_service = "ru.shtrih_m.fr";
@@ -271,6 +271,9 @@ dbus_method("device_set_print_daily_report_buffer", ["int32"], [["dict", "string
 dbus_method("device_get_rowcount_printbuf", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_string_printbuf", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_clear_printbuf", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_print_barcode_printer", ["int32", "int32", "int32", "int32", "int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
+dbus_method("device_get_random_sequence", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_authentication", ["int32", "string"], [["dict", "string", "string"]]);
 dbus_method("device_get_fr_ibm_status_long", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_fr_ibm_status", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_open_turn", ["int32"], [["dict", "string", "string"]]);
@@ -290,6 +293,9 @@ dbus_method("device_get_fn_status", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_fn_number", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_fn_duration", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_fn_version", ["int32"], [["dict", "string", "string"]]);
+
+dbus_method("device_set_start_open_turn", ["int32"], [["dict", "string", "string"]]);
+dbus_method("device_set_start_close_turn", ["int32"], [["dict", "string", "string"]]);
 
 # connect
 $dbus_object->connect_to_signal("service_shutdown", sub { $dbus_object->service_shutdown(); } );
@@ -1622,6 +1628,39 @@ sub device_set_clear_printbuf
 	$self->{DEVICE}->set_clear_printbuf(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
+sub device_set_print_barcode_printer
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_print_barcode_printer(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_random_sequence
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_random_sequence(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_set_authentication
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_authentication(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
 sub device_get_fr_ibm_status_long
 {
     my $self = shift;
@@ -1829,4 +1868,26 @@ sub device_get_fn_version
 
     return $self->device_is_online() ?
 	$self->{DEVICE}->get_fn_version(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_set_start_open_turn
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_start_open_turn(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_set_start_close_turn
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_start_close_turn(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
