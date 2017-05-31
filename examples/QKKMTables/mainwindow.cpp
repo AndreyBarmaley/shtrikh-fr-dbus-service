@@ -21,6 +21,8 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow), kkm(NULL), currentTable(NULL), codec(NULL), tableWidgetAccepted(false)
 {
     ui->setupUi(this);
+    ui->textResult->setReadOnly(true);
+
     setWindowTitle(QString("KKM Tables, version: ").append(QString::number(VERSION)));
 
     readSettings();
@@ -288,4 +290,74 @@ void MainWindow::closeEvent(QCloseEvent*)
 
         cellsChanged.clear();
     }
+}
+
+QString flags_to_text(const QString & str)
+{
+    QStringList list = str.split(QRegExp(",\\s+"));
+    for(auto it = list.begin(); it != list.end(); ++it)
+        *it = QString("\t- ").append(*it);
+    return list.join("\n");
+}
+
+void MainWindow::on_pushButtonGetDeviceStatus_clicked()
+{
+    int error;
+    auto resultMap = kkm->call("device_get_status", QList<QVariant>() << kkmPassword, &error);
+
+    if(error)
+    {
+        ui->textResult->setPlainText(QString("Error code:\t\t\t%1\nError message:\t\t\t%2").arg(resultMap.value("ERROR_CODE")).arg(resultMap.value("ERROR_MESSAGE")));
+        return;
+    }
+
+    QStringList content;
+
+    // main info
+    content << QString("Current date:\t\t\t%1\n"
+                               "Current time:\t\t\t%2\n"
+                               "Serial number:\t\t%3\n"
+                               "INN number:\t\t\t%4\n"
+                               "Current doc number:\t\t%5\n"
+                               "Hall number:\t\t\t%6\n"
+                               "Fiscal number:\t\t%7\n"
+                               "Fiscal last:\t\t\t%8\n"
+                               "Last tour number:\t\t%9\n").
+            arg(resultMap.value("DATE")).
+            arg(resultMap.value("TIME")).
+            arg(resultMap.value("SERIAL_NUMBER")).
+            arg(resultMap.value("INN_NUMBER")).
+            arg(resultMap.value("CURRENT_DOC_NUMBER")).
+            arg(resultMap.value("HALL_NUMBER")).
+            arg(resultMap.value("FISCAL_NUMBER")).
+            arg(resultMap.value("FISCAL_LAST")).
+            arg(resultMap.value("LAST_TOUR_NUMBER"));
+
+    // FR info
+    content << QString("FR prog version:\t\t%1\n"
+                             "FR build version:\t\t%2\n"
+                             "FR date:\t\t\t%3\n"
+                             "FR flags:\t\t\t%4\n%5\n"
+                             "FR mode:\t\t\t%6\n%7\n"
+                             "FR submode:\t\t\t%8\n%9\n").
+            arg(resultMap.value("FR_PROG_VERSION")).
+            arg(resultMap.value("FR_BUILD_VERSION")).
+            arg(resultMap.value("FR_DATE")).
+            arg(resultMap.value("FR_FLAGS")).arg(flags_to_text(resultMap.value("MESSAGE_FR_FLAGS"))).
+            arg(resultMap.value("FR_MODE")).arg(flags_to_text(resultMap.value("MESSAGE_FR_MODE"))).
+            arg(resultMap.value("FR_SUBMODE")).arg(flags_to_text(resultMap.value("MESSAGE_FR_SUBMODE")));
+
+    // FP info
+    content << QString("FP prog version:\t\t%1\n"
+                       "FP build version:\t\t%2\n"
+                       "FP date:\t\t\t%3\n"
+                       "FP flags:\t\t\t%4\n%5\n"
+                       "FP open records:\t\t%6\n").
+               arg(resultMap.value("FP_PROG_VERSION")).
+               arg(resultMap.value("FP_BUILD_VERSION")).
+               arg(resultMap.value("FP_DATE")).
+               arg(resultMap.value("FP_FLAGS")).arg(flags_to_text(resultMap.value("MESSAGE_FP_FLAGS"))).
+               arg(resultMap.value("FP_OPEN_RECORDS"));
+
+    ui->textResult->setPlainText(content.join("================================================\n"));
 }

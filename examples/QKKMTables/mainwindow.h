@@ -47,6 +47,8 @@ private slots:
     void on_tableWidget_cellChanged(int row, int column);
     void on_menuOptions_show(void);
 
+    void on_pushButtonGetDeviceStatus_clicked();
+
 private:
     Ui::MainWindow *ui;
     DBusKKM* kkm;

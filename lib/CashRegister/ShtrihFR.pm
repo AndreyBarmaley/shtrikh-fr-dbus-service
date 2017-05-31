@@ -533,25 +533,25 @@ sub get_device_status
 	$res->{FR_DATE} = format_date(2000 + $datefr_year, $datefr_month, $datefr_day);
 	$res->{HALL_NUMBER} = $hall_number;
 	$res->{CURRENT_DOC_NUMBER} = $cur_doc;
-	$res->{FR_FLAGS} = $flagfr;
-	$res->{FR_MODE} = $mode;
-	$res->{FR_SUBMODE} = $submode;
+	$res->{FR_FLAGS} = get_hexstr4($flagfr);
+	$res->{FR_MODE} = get_hexstr2($mode);
+	$res->{FR_SUBMODE} = get_hexstr2($submode);
 	$res->{FR_PORT} = $port;
 	$res->{FP_PROG_VERSION} = join('.', $progfp_ver_hi, $progfp_ver_lo);
 	$res->{FP_BUILD_VERSION} = $buildfp;
 	$res->{FP_DATE} = format_date(2000 + $datefp_year, $datefp_month, $datefp_day);
 	$res->{DATE} = format_date(2000 + $date_year, $date_month, $date_day);
 	$res->{TIME} = format_time($time_hour, $time_min, $time_sec);
-	$res->{FP_FLAGS} = $flag_fp;
+	$res->{FP_FLAGS} = get_hexstr4($flag_fp);
 	$res->{SERIAL_NUMBER} = $serial;
 	$res->{LAST_TOUR_NUMBER} = $last_tour;
 	$res->{FP_OPEN_RECORDS} = $open_rec;
 	$res->{FISCAL_NUMBER} = $fiscal_number;
 	$res->{FISCAL_LAST} = $fiscal_last;
-	$res->{INN_NUMBER} = get_hexstr_from_binary_le($inn);
+	$res->{INN_NUMBER} = hex(get_hexnum_from_binary_le($inn));
 
 	$res->{MESSAGE_FR_MODE} = $self->get_message_fr_mode($res->{FR_MODE});
-	$res->{MESSAGE_SUBMODE} = $self->get_message_fr_submode($res->{FR_SUBMODE});
+	$res->{MESSAGE_FR_SUBMODE} = $self->get_message_fr_submode($res->{FR_SUBMODE});
 	$res->{MESSAGE_FR_FLAGS} = join(', ', $self->get_message_fr_flags($res->{FR_FLAGS}));
 	$res->{MESSAGE_FP_FLAGS} = join(', ', $self->get_message_fp_flags($res->{FP_FLAGS}));
     }
@@ -1780,7 +1780,7 @@ sub get_fiscalization_params
 	my ($rnm, $inn, $tour_number, $fiscal_day, $fiscal_month, $fiscal_year, undef) = unpack("a5a6vCCC", $buf);
 
 	$res->{RNM_NUMBER} = get_hexnum_from_binary_le($rnm);
-	$res->{INN_NUMBER} = get_hexnum_from_binary_le($inn);
+	$res->{INN_NUMBER} = hex(get_hexnum_from_binary_le($inn));
 	$res->{TOUR_NUMBER_AFTER_FICAL} = $tour_number;
 	$res->{FIRST_TOUR_DATE} = format_date(2000 + $fiscal_year, $fiscal_month, $fiscal_day);
     }
