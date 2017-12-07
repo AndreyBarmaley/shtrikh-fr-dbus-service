@@ -26,7 +26,7 @@ use POSIX qw(strftime);
 use Time::HiRes qw(gettimeofday);
 use CashRegister::ShtrihFR;
 
-my $version = "20170531";
+my $version = "20170606";
 my @ports = ( glob("/dev/ttyS*"), glob("/dev/ttyUSB*") );
 
 my $str_dbus_service = "ru.shtrih_m.fr";
@@ -287,6 +287,7 @@ dbus_method("device_get_operational_report_ni", ["int32"], [["dict", "string", "
 dbus_method("device_set_flap_control", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_check_getout", ["int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_password_cto", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_ext_request", ["int32", ["array", "byte"]], [["dict", "string", "string"]]);
 dbus_method("device_get_type", [], [["dict", "string", "string"]]);
 dbus_method("device_set_extdev_command", ["int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
 dbus_method("device_get_fn_status", ["int32"], [["dict", "string", "string"]]);
@@ -1802,6 +1803,17 @@ sub device_set_password_cto
 
     return $self->device_is_online() ?
 	$self->{DEVICE}->set_password_cto(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_ext_request
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_ext_request(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_get_type

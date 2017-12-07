@@ -1118,6 +1118,12 @@ params: old pass, int32
 params: new pass, int32
 return: dict["string", "string"]
 
+command: 0xF7
+call:   get_ext_request
+params: type, int32
+params: data, ["array", "byte"]
+return: dict["string", "string"]
+
 command: 0xFC
 call:   device_get_type
 params: none

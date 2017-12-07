@@ -18,7 +18,7 @@ use strict;
 
 use constant
 {
-    MY_DRIVER_VERSION => 20170531,
+    MY_DRIVER_VERSION => 20170929,
     FR_PROTOCOL_VERSION	=> 1.99
 };
 
@@ -158,6 +158,7 @@ use constant
     SET_FLAP_CONTROL		=> 0xF0,
     SET_CHECK_GETOUT		=> 0xF1,
     SET_PASSWORD_CTO		=> 0xF3,
+    GET_EXT_REQUEST		=> 0xF7,
     GET_DEVICE_TYPE		=> 0xFC,
     SET_EXT_DEVICE_COMMAND	=> 0xFD,
 };
@@ -426,11 +427,11 @@ sub set_fiscalization_long_rnm
 
     if($buf)
     {
-	my ($fiscal_number, $fiscal_last, $last_tour, $date_day, $date_month, $date_year, undef) = unpack("CCvCCC", $buf);
+	my ($fiscal_number, $fiscal_last, $last_tour, $date, undef) = unpack("CCva3", $buf);
 
 	$res->{FISCAL_NUMBER} = $fiscal_number;
 	$res->{FISCAL_LAST} = $fiscal_last;
-	$res->{FISCAL_DATE} = format_date(2000 + $date_year, $date_month, $date_day);
+	$res->{FISCAL_DATE} = format_date_decode($date);
 	$res->{LAST_TOUR_NUMBER} = $last_tour;
     }
 
@@ -488,7 +489,7 @@ sub get_short_status
     if($buf)
     {
 	my ($oper, $flags, $mode, $submode, $count_lo, $battery,
-		$power, $err_fp, $err_eklz, $count_hi, $rez, undef) = unpack("CvCCCCCCCCC3", $buf);
+		$power, $err_fp, $err_eklz, $count_hi, $rez, $print_status, undef) = unpack("CvCCCCCCCCa3C", $buf);
 
 	$res->{OPERATOR} = $oper;
 	$res->{FR_FLAGS} = $flags;
@@ -499,6 +500,7 @@ sub get_short_status
 	$res->{POWER_BATTERY} = $battery;
 	$res->{ERROR_FP} = $err_fp;
 	$res->{ERROR_EKLZ} = $err_eklz;
+	$res->{PRINT_STATUS} = $print_status if(defined $print_status);
 
 	$res->{MESSAGE_FR_MODE} = $self->get_message_fr_mode($res->{FR_MODE});
 	$res->{MESSAGE_FR_SUBMODE} = $self->get_message_fr_submode($res->{FR_SUBMODE});
@@ -521,29 +523,31 @@ sub get_device_status
 
     if($buf)
     {
-	my ($oper, $progfr_ver_hi, $progfr_ver_lo, $buildfr_ver, $datefr_day, $datefr_month, $datefr_year,
+	my ($oper, $progfr_ver_hi, $progfr_ver_lo, $buildfr_ver, $datefr,
 		$hall_number, $cur_doc, $flagfr, $mode, $submode, $port,
-		$progfp_ver_lo, $progfp_ver_hi, $buildfp, $datefp_day, $datefp_month, $datefp_year,
-		$date_day, $date_month, $date_year, $time_hour, $time_min, $time_sec, $flag_fp, $serial,
-		$last_tour, $open_rec, $fiscal_number, $fiscal_last, $inn, undef) = unpack("CCCvCCCCvvCCCCCvCCCCCCCCCCVvvCCa6", $buf);
+		$progfp_ver_lo, $progfp_ver_hi, $buildfp, $datefp,
+		$date, $time, $flag_fp_lo, $serial_num_lo,
+		$last_tour, $open_rec, $fiscal_number, $fiscal_last, $inn,
+		$flag_fp_hi, $mode_fp, $serial_num_hi, undef) = unpack("CCCva3CvvCCCCCva3a3a3CVvvCCa6CC", $buf);
 
 	$res->{OPERATOR} = $oper;
-	$res->{FR_PROG_VERSION} = join('.', $progfr_ver_hi, $progfr_ver_lo);
+	$res->{FR_PROG_VERSION} = uc(join('.', chr($progfr_ver_hi), chr($progfr_ver_lo)));
 	$res->{FR_BUILD_VERSION} = $buildfr_ver;
-	$res->{FR_DATE} = format_date(2000 + $datefr_year, $datefr_month, $datefr_day);
+	$res->{FR_DATE} = format_date_decode($datefr);
 	$res->{HALL_NUMBER} = $hall_number;
 	$res->{CURRENT_DOC_NUMBER} = $cur_doc;
 	$res->{FR_FLAGS} = get_hexstr4($flagfr);
 	$res->{FR_MODE} = get_hexstr2($mode);
 	$res->{FR_SUBMODE} = get_hexstr2($submode);
 	$res->{FR_PORT} = $port;
-	$res->{FP_PROG_VERSION} = join('.', $progfp_ver_hi, $progfp_ver_lo);
+	$res->{FP_PROG_VERSION} = uc(join('.', chr($progfp_ver_hi), chr($progfp_ver_lo)));
 	$res->{FP_BUILD_VERSION} = $buildfp;
-	$res->{FP_DATE} = format_date(2000 + $datefp_year, $datefp_month, $datefp_day);
-	$res->{DATE} = format_date(2000 + $date_year, $date_month, $date_day);
-	$res->{TIME} = format_time($time_hour, $time_min, $time_sec);
-	$res->{FP_FLAGS} = get_hexstr4($flag_fp);
-	$res->{SERIAL_NUMBER} = $serial;
+	$res->{FP_DATE} = format_date_decode($datefp);
+	$res->{FP_MODE} = get_hexstr2($mode_fp) if(defined $mode_fp);
+	$res->{DATE} = format_date_decode($date);
+	$res->{TIME} = format_time_decode($time);
+	$res->{FP_FLAGS} = get_hexstr4(defined $flag_fp_hi ? ($flag_fp_hi << 8 | $flag_fp_lo) : $flag_fp_lo);
+	$res->{SERIAL_NUMBER} = defined $serial_num_hi ? $serial_num_hi . $serial_num_lo : $serial_num_lo;
 	$res->{LAST_TOUR_NUMBER} = $last_tour;
 	$res->{FP_OPEN_RECORDS} = $open_rec;
 	$res->{FISCAL_NUMBER} = $fiscal_number;
@@ -1639,11 +1643,11 @@ sub get_fp_last_record_date
 
     if($buf)
     {
-	my ($oper, $type, $date_day, $date_month, $date_year, undef) = unpack("CCCCC", $buf);
+	my ($oper, $type, $date, undef) = unpack("CCa3", $buf);
 
 	$res->{OPERATOR} = $oper;
 	$res->{LAST_RECORD_TYPE} = $type;
-	$res->{LAST_RECORD_DATE} = format_date(2000 + $date_year, $date_month, $date_day);
+	$res->{LAST_RECORD_DATE} = format_date_decode($date);
     }
 
     return $res;
@@ -1662,11 +1666,10 @@ sub get_query_date_range_tour
 
     if($buf)
     {
-	my ($first_day, $first_month, $first_year,
-	    $last_day, $last_month, $last_year, $first_number, $last_number,  undef) = unpack("CCCCCCvv", $buf);
+	my ($first_date, $last_date, $first_number, $last_number,  undef) = unpack("a3a3vv", $buf);
 
-	$res->{FIRST_TOUR_DATE} = format_date(2000 + $first_year, $first_month, $first_day);
-	$res->{LAST_TOUR_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
+	$res->{FIRST_TOUR_DATE} = format_date_decode($first_date);
+	$res->{LAST_TOUR_DATE} = format_date_decode($last_date);
 	$res->{FIRST_TOUR_NUMBER} = $first_number;
 	$res->{LAST_TOUR_NUMBER} = $last_number;
     }
@@ -1689,11 +1692,11 @@ sub set_fiscalization
 
     if($buf)
     {
-	my ($fiscal_number, $fiscal_last, $last_tour, $last_day, $last_month, $last_year, undef) = unpack("CCvCCC", $buf);
+	my ($fiscal_number, $fiscal_last, $last_tour, $last_date, undef) = unpack("CCva3", $buf);
 
         $res->{FISCAL_NUMBER} = $fiscal_number;
         $res->{FISCAL_LAST} = $fiscal_last;
-        $res->{FISCAL_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
+        $res->{FISCAL_DATE} = format_date_decode($last_date);
         $res->{LAST_TOUR_NUMBER} = $last_tour;
     }
 
@@ -1713,11 +1716,10 @@ sub get_fiscal_report_by_date
 
     if($buf)
     {
-	my ($first_day, $first_month, $first_year,
-	    $last_day, $last_month, $last_year, $first_number, $last_number,  undef) = unpack("CCCCCCvv", $buf);
+	my ($first_date, $last_date, $first_number, $last_number,  undef) = unpack("a3a3vv", $buf);
 
-	$res->{FIRST_TOUR_DATE} = format_date(2000 + $first_year, $first_month, $first_day);
-	$res->{LAST_TOUR_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
+	$res->{FIRST_TOUR_DATE} = format_date_decode($first_date);
+	$res->{LAST_TOUR_DATE} = format_date_decode($last_date);
 	$res->{FIRST_TOUR_NUMBER} = $first_number;
 	$res->{LAST_TOUR_NUMBER} = $last_number;
     }
@@ -1738,11 +1740,10 @@ sub get_fiscal_report_by_tour
 
     if($buf)
     {
-	my ($first_day, $first_month, $first_year,
-	    $last_day, $last_month, $last_year, $first_number, $last_number,  undef) = unpack("CCCCCCvv", $buf);
+	my ($first_date, $last_date, $first_number, $last_number,  undef) = unpack("a3a3vv", $buf);
 
-	$res->{FIRST_TOUR_DATE} = format_date(2000 + $first_year, $first_month, $first_day);
-	$res->{LAST_TOUR_DATE} = format_date(2000 + $last_year, $last_month, $last_day);
+	$res->{FIRST_TOUR_DATE} = format_date_decode($first_date);
+	$res->{LAST_TOUR_DATE} = format_date_decode($last_date);
 	$res->{FIRST_TOUR_NUMBER} = $first_number;
 	$res->{LAST_TOUR_NUMBER} = $last_number;
     }
@@ -1777,12 +1778,12 @@ sub get_fiscalization_params
 
     if($buf)
     {
-	my ($rnm, $inn, $tour_number, $fiscal_day, $fiscal_month, $fiscal_year, undef) = unpack("a5a6vCCC", $buf);
+	my ($rnm, $inn, $tour_number, $fiscal_date, undef) = unpack("a5a6va3", $buf);
 
 	$res->{RNM_NUMBER} = get_hexnum_from_binary_le($rnm);
 	$res->{INN_NUMBER} = hex(get_hexnum_from_binary_le($inn));
 	$res->{TOUR_NUMBER_AFTER_FICAL} = $tour_number;
-	$res->{FIRST_TOUR_DATE} = format_date(2000 + $fiscal_year, $fiscal_month, $fiscal_day);
+	$res->{FIRST_TOUR_DATE} = format_date_decode($fiscal_date);
     }
 
     return $res;
@@ -2428,6 +2429,7 @@ sub set_check_cancellation
     {
         my ($oper, undef) = unpack("C", $buf);
         $res->{OPERATOR} = $oper;
+	$self->printing_wait($pass);
     }
 
     return $res;
@@ -2611,7 +2613,7 @@ sub set_print_continue
 	my ($oper, undef) = unpack("C", $buf);
 	$res->{OPERATOR} = $oper;
 
-	$self->printing_wait($pass) if($wait);
+	# $self->printing_wait($pass) if($wait);
     }
 
     return $res;
@@ -2920,22 +2922,21 @@ sub get_fr_ibm_status_long
 
     if($buf)
     {
-	my ($oper, $cur_year, $cur_month, $cur_day, $cur_hour, $cur_min, $cur_sec,
+	my ($oper, $cur_date, $cur_time,
 	    $last_tour, $last_docnum, $checks_sale, $checks_buy, $checks_sale_returns, $checks_buy_returns,
-	    $open_year, $open_month, $open_day, $open_hour, $open_min, $open_sec,
-	    $cash, $status, $flags, undef) = unpack("CCCCCCCvVvvvvCCCCCCa6a8C", $buf);
+	    $open_date, $open_time, $cash, $status, $flags, undef) = unpack("Ca3a3vVvvvva3a3a6a8C", $buf);
 
 	$res->{OPERATOR} = $oper;
-	$res->{CURRENT_DATE} = format_date(2000 + $cur_year, $cur_month, $cur_day);
-	$res->{CURRENT_TIME} = format_time($cur_hour, $cur_min, $cur_sec);
+	$res->{CURRENT_DATE} = format_date_decode($cur_date);
+	$res->{CURRENT_TIME} = format_time_decode($cur_time);
 	$res->{LAST_TOUR_NUMBER} = $last_tour;
 	$res->{LAST_DOCNUM} = $last_docnum;
 	$res->{COUNT_CHECKS_SALE} = $checks_sale;
 	$res->{COUNT_CHECKS_BUY} = $checks_buy;
 	$res->{COUNT_CHECKS_SALE_RETURNS} = $checks_sale_returns;
 	$res->{COUNT_CHECKS_BUY_RETURNS} = $checks_buy_returns;
-	$res->{OPEN_TOUR_DATE} = format_date(2000 + $open_year, $open_month, $open_day);
-	$res->{OPEN_TOUR_TIME} = format_time($open_hour, $open_min, $open_sec);
+	$res->{OPEN_TOUR_DATE} = format_date_decode($open_date);
+	$res->{OPEN_TOUR_TIME} = format_time_decode($open_time);
 	$res->{CASH} = get_hexdump($cash);
 	$res->{STATUS} = get_hexdump($status);
 	$res->{FLAGS} = $flags;
@@ -3183,6 +3184,26 @@ sub set_password_cto
     return $res;
 }
 
+sub get_ext_request
+{
+    my ($self, $type, $array_ref, undef) = @_;
+
+    my $res = {};
+    my $data = pack("C*", @{$array_ref});
+    my $buf = $self->send_cmd(2 + length $data, GET_EXT_REQUEST, "Ca*", $type, $data);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	$res->{EXT_REQUEST_RESULT} = get_hexdump($buf);
+    }
+
+    return $res;
+}
+
 sub get_device_type
 {
     my $self = shift;
@@ -3245,7 +3266,7 @@ sub get_fn_status
     if($buf)
     {
 	my ($mode, $curdoc, $datadoc, $status, $flags,
-	    $date_year, $date_month, $date_day, $time_hour, $time_min, $fn_number, $fd_last, undef) = unpack("CCCCCCCCCCa16V", $buf);
+	    $date, $hour, $minute, $fn_number, $fd_last, undef) = unpack("CCCCCa3CCa16V", $buf);
 	$res->{FN_NUMER} = $fn_number;
 	$res->{FD_LAST} = $fd_last;
 	$res->{FLAG_LIFE_STATUS} = get_hexstr2($mode);
@@ -3253,8 +3274,8 @@ sub get_fn_status
 	$res->{FLAG_DOCUMENT_DATA} = get_hexstr2($datadoc);
 	$res->{FLAG_TURN_STATUS} = get_hexstr2($status);
 	$res->{FLAG_WARNINGS} = get_hexstr2($flags);
-	$res->{DATE} = format_date(2000 + $date_year, $date_month, $date_day);
-	$res->{TIME} = format_time($time_hour, $time_min, 0);
+	$res->{DATE} = format_date_decode($date);
+	$res->{TIME} = format_time($hour, $minute, 0);
     }
 
     return $res;
@@ -3294,9 +3315,9 @@ sub get_fn_duration
 
     if($buf)
     {
-	my ($oper, $date_year, $date_month, $date_day, undef) = unpack("CCCC", $buf);
+	my ($oper, $date, undef) = unpack("Ca3", $buf);
 	$res->{OPERATOR} = $oper;
-	$res->{FN_DURATION} = format_date(2000 + $date_year, $date_month, $date_day);
+	$res->{FN_DURATION} = format_date_decode($date);
     }
 
     return $res;
@@ -3767,9 +3788,21 @@ sub format_date
     return join('-', map(sprintf("%.2u", $_), @_));
 }
 
+sub format_date_decode
+{
+    my ($day, $month, $year, undef) = unpack("CCC", shift);
+    return format_date(2000 + $year, $month, $day);
+}
+
 sub format_time
 {
     return join(':', map(sprintf("%.2u", $_), @_));
+}
+
+sub format_time_decode
+{
+    my ($hour, $min, $sec, undef) = unpack("CCC", shift);
+    return format_time($hour, $min, $sec);
 }
 
 sub get_hexstr2
