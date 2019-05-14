@@ -18,7 +18,7 @@ use strict;
 
 use constant
 {
-    MY_DRIVER_VERSION => 20170929,
+    MY_DRIVER_VERSION => 20190514,
     FR_PROTOCOL_VERSION	=> 1.99
 };
 
@@ -169,6 +169,7 @@ use constant
     FF_GET_FN_NUMBER		=> 0x02,
     FF_GET_FN_DURATION		=> 0x03,
     FF_GET_FN_VERSION		=> 0x04,
+    FF_GET_FN_TURN_STATUS  	=> 0x40,
     FF_SET_START_OPEN_TURN	=> 0x41,
     FF_SET_START_CLOSE_TURN	=> 0x42
 };
@@ -3340,6 +3341,29 @@ sub get_fn_version
 	$res->{FN_VERSION} = Encode::decode($self->{ENCODE_TO}, $version);
 	$res->{FN_TYPE} = get_hexstr2($type);
     }
+
+    return $res;
+}
+
+sub get_fn_turn_status
+{
+    my ($self, $pass, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd_ff(6, FF_GET_FN_TURN_STATUS, "V", $pass);
+
+
+    if($buf) {
+        my ($tour_state, $tour_number, $receipt_number, undef) = unpack("Cvv", $buf);
+
+        $res->{TOUR_STATE} = $tour_state;
+        $res->{TOUR_NUMBER} = $tour_number;
+        $res->{RECEIPT_NUMBER} = $receipt_number;
+    }
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
 
     return $res;
 }
