@@ -1156,6 +1156,11 @@ call:   device_get_fn_version
 params: password, int32
 return: dict["string", "string"]
 
+command: 0xFF40
+call:   device_get_fn_turn_status
+params: password, int32
+return: dict["string", "string"]
+
 command: 0xFF41
 call:   device_set_start_open_turn
 params: password, int32
