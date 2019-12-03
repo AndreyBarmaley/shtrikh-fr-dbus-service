@@ -122,7 +122,6 @@ use constant
     GET_DOCUMENT_REPEAT		=> 0x8C,
     SET_CHECK_OPEN		=> 0x8D,
     SET_CHECK_CLOSE_EXT		=> 0x8E,
-    SET_CHECK_CLOSE_EXT_V2		=> 0xFF45,
 
     #
     # skip commands: 0x90 - 0x9F
@@ -166,13 +165,16 @@ use constant
 
 use constant
 {
-    FF_GET_FN_STATUS		=> 0x01,
-    FF_GET_FN_NUMBER		=> 0x02,
-    FF_GET_FN_DURATION		=> 0x03,
-    FF_GET_FN_VERSION		=> 0x04,
-    FF_GET_FN_TURN_STATUS  	=> 0x40,
-    FF_SET_START_OPEN_TURN	=> 0x41,
-    FF_SET_START_CLOSE_TURN	=> 0x42
+    FF_GET_FN_STATUS        => 0x01,
+    FF_GET_FN_NUMBER        => 0x02,
+    FF_GET_FN_DURATION      => 0x03,
+    FF_GET_FN_VERSION       => 0x04,
+    FF_GET_FN_TURN_STATUS   => 0x40,
+    FF_SET_START_OPEN_TURN  => 0x41,
+    FF_SET_START_CLOSE_TURN => 0x42,
+    FF_SET_CHECK_CLOSE_EXT_V2		=> 0x45,
+
+    FF_GET_FIND_FN_DOCUMENT => 0x0a
 };
 
 use constant
@@ -2583,7 +2585,7 @@ sub set_check_close_ext_v2
         $discount, $tax1, $tax2, $tax3, $tax4, $tax5, $tax6, $tax_type, $text, undef) = @_;
 
     my $res = {};
-    my $buf = $self->send_cmd(134, SET_CHECK_CLOSE_EXT_V2, "Va5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5vCCCCCCCA40", $pass,
+    my $buf = $self->send_cmd_ff(134, FF_SET_CHECK_CLOSE_EXT_V2, "Va5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5vCCCCCCCA40", $pass,
         get_le_bigint5_from_string($cash_sum),
         get_le_bigint5_from_string($sum_type2), get_le_bigint5_from_string($sum_type3), get_le_bigint5_from_string($sum_type4),
         get_le_bigint5_from_string($sum_type5), get_le_bigint5_from_string($sum_type6), get_le_bigint5_from_string($sum_type7),
@@ -3307,6 +3309,37 @@ sub get_fn_status
 	$res->{FLAG_WARNINGS} = get_hexstr2($flags);
 	$res->{DATE} = format_date_decode($date);
 	$res->{TIME} = format_time($hour, $minute, 0);
+    }
+
+    return $res;
+}
+
+
+sub get_find_fn_document
+{
+    my ($self, $pass, $doc_number, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd_ff(10, FF_GET_FIND_FN_DOCUMENT, "VV", $pass, $doc_number);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+	my ($ofd_received, $type, $date, $hour, $minute, $document_number, $fiscal_sign, $fiscal_sign_as_string, $inn, $kktregnum, $tax_type, $work_mode, undef) = unpack("CCa3CCVVa10a12a20CC", $buf);
+	$res->{OFD_RECEIVED} = get_hexstr2($ofd_received);
+	$res->{DOCUMENT_NUMBER} = $document_number;
+	$res->{FISCAL_SIGN} = $fiscal_sign;
+	$res->{FISCAL_SIGN_AS_STRING} = $fiscal_sign_as_string;
+	$res->{TYPE} = get_hexstr2($type);
+	$res->{DATE} = format_date_decode($date);
+	$res->{TIME} = format_time($hour, $minute, 0);
+	$res->{INN} = $inn;
+	$res->{KKT_REG_NUM} = $kktregnum;
+	$res->{TAX_TYPE} = get_hexstr2($tax_type);
+	$res->{WORK_MODE} = get_hexstr2($work_mode);
     }
 
     return $res;

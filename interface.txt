@@ -1200,3 +1200,9 @@ params: tax 6, int32
 params: tax type, int32
 params: text, string	# is 40 byte
 return: dict["string", "string"]
+
+command: 0xFF0A
+call:   device_get_find_fn_document
+params: password, int32
+params: docnum, int32
+return: dict["string", "string"]
