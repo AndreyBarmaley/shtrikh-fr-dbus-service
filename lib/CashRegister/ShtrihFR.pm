@@ -122,6 +122,7 @@ use constant
     GET_DOCUMENT_REPEAT		=> 0x8C,
     SET_CHECK_OPEN		=> 0x8D,
     SET_CHECK_CLOSE_EXT		=> 0x8E,
+    SET_CHECK_CLOSE_EXT_V2		=> 0xFF45,
 
     #
     # skip commands: 0x90 - 0x9F
@@ -1916,7 +1917,7 @@ sub set_forming_standard_operation_underdoc
     # amount is big int string
     # price is big int string
     # text is 40 byte
-    my ($self, $pass, 
+    my ($self, $pass,
 	$number_string_pd, $amount, $price, $department, $tax1, $tax2, $tax3, $tax4, $text, undef) = @_;
 
     my $res = {};
@@ -1994,7 +1995,7 @@ sub set_forming_close_check_underdoc
     # text is 40 byte
     my ($self, $pass, $string_count, $string_number_amount, $string_number_str, $string_number_cash,
 	$string_number_payment_type2, $string_number_payment_type3, $string_number_payment_type4, $string_number_short_change,
-	$string_number_return_tax_a, $string_number_return_tax_b, $string_number_return_tax_v, $string_number_return_tax_g, 
+	$string_number_return_tax_a, $string_number_return_tax_b, $string_number_return_tax_v, $string_number_return_tax_g,
 	$string_number_sum_tax_a, $string_number_sum_tax_b, $string_number_sum_tax_v, $string_number_sum_tax_g, $string_number_sum_accrual_discount,
 	$string_number_sum_discount, $font_number_str, $font_number_itog, $font_number_itog_sum, $font_number_cash,
 	$font_number_cash_sum, $font_number_payment_name2, $font_number_payment_sum2, $font_number_payment_name3, $font_number_payment_sum3,
@@ -2004,12 +2005,12 @@ sub set_forming_close_check_underdoc
 	$font_number_tax_name_v, $font_number_tax_return_v, $font_number_tax_rate_v, $font_number_tax_sum_v,
 	$font_number_tax_name_g, $font_number_tax_return_g, $font_number_tax_rate_g, $font_number_tax_sum_g,
 	$font_number_total, $font_number_sum_discount, $font_number_discount_xx, $font_number_sum_discount_check, $count_sym_field_str,
-	$count_sym_field_sum_itog, $count_sym_field_sum_cash, $count_sym_field_type2, $count_sym_field_type3, $count_sym_field_type4, $count_sym_field_change, 
+	$count_sym_field_sum_itog, $count_sym_field_sum_cash, $count_sym_field_type2, $count_sym_field_type3, $count_sym_field_type4, $count_sym_field_change,
 	$count_sym_field_tax_name_a, $count_sym_field_tax_return_a, $count_sym_field_tax_rate_a, $count_sym_field_tax_sum_a,
 	$count_sym_field_tax_name_b, $count_sym_field_tax_return_b, $count_sym_field_tax_rate_b, $count_sym_field_tax_sum_b,
 	$count_sym_field_tax_name_v, $count_sym_field_tax_return_v, $count_sym_field_tax_rate_v, $count_sym_field_tax_sum_v,
 	$count_sym_field_tax_name_g, $count_sym_field_tax_return_g, $count_sym_field_tax_rate_g, $count_sym_field_tax_sum_g,
-	$count_sym_field_sum_discount, $count_sym_field_sum_procent_check, $count_sym_field_sum_discount_check, 
+	$count_sym_field_sum_discount, $count_sym_field_sum_procent_check, $count_sym_field_sum_discount_check,
 	$offset_field_str, $offset_field_itog, $offset_field_itog_sum, $offset_field_cash, $offset_field_cash_sum,
 	$offset_field_payment_name2, $offset_field_payment_sum2, $offset_field_payment_name3, $offset_field_payment_sum3, $offset_field_payment_name4,
 	$offset_field_payment_sum4, $offset_field_change, $offset_field_change_sum,
@@ -2024,7 +2025,7 @@ sub set_forming_close_check_underdoc
     my $buf = $self->send_cmd(182, SET_FORMING_CLOSE_CHECK_UNDERDOC, "VCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCa5a5a5a5vCCCCA40", $pass,
 	$string_count, $string_number_amount, $string_number_str, $string_number_cash,
 	$string_number_payment_type2, $string_number_payment_type3, $string_number_payment_type4, $string_number_short_change,
-	$string_number_return_tax_a, $string_number_return_tax_b, $string_number_return_tax_v, $string_number_return_tax_g, 
+	$string_number_return_tax_a, $string_number_return_tax_b, $string_number_return_tax_v, $string_number_return_tax_g,
 	$string_number_sum_tax_a, $string_number_sum_tax_b, $string_number_sum_tax_v, $string_number_sum_tax_g, $string_number_sum_accrual_discount,
 	$string_number_sum_discount, $font_number_str, $font_number_itog, $font_number_itog_sum, $font_number_cash,
 	$font_number_cash_sum, $font_number_payment_name2, $font_number_payment_sum2, $font_number_payment_name3, $font_number_payment_sum3,
@@ -2034,12 +2035,12 @@ sub set_forming_close_check_underdoc
 	$font_number_tax_name_v, $font_number_tax_return_v, $font_number_tax_rate_v, $font_number_tax_sum_v,
 	$font_number_tax_name_g, $font_number_tax_return_g, $font_number_tax_rate_g, $font_number_tax_sum_g,
 	$font_number_total, $font_number_sum_discount, $font_number_discount_xx, $font_number_sum_discount_check, $count_sym_field_str,
-	$count_sym_field_sum_itog, $count_sym_field_sum_cash, $count_sym_field_type2, $count_sym_field_type3, $count_sym_field_type4, $count_sym_field_change, 
+	$count_sym_field_sum_itog, $count_sym_field_sum_cash, $count_sym_field_type2, $count_sym_field_type3, $count_sym_field_type4, $count_sym_field_change,
 	$count_sym_field_tax_name_a, $count_sym_field_tax_return_a, $count_sym_field_tax_rate_a, $count_sym_field_tax_sum_a,
 	$count_sym_field_tax_name_b, $count_sym_field_tax_return_b, $count_sym_field_tax_rate_b, $count_sym_field_tax_sum_b,
 	$count_sym_field_tax_name_v, $count_sym_field_tax_return_v, $count_sym_field_tax_rate_v, $count_sym_field_tax_sum_v,
 	$count_sym_field_tax_name_g, $count_sym_field_tax_return_g, $count_sym_field_tax_rate_g, $count_sym_field_tax_sum_g,
-	$count_sym_field_sum_discount, $count_sym_field_sum_procent_check, $count_sym_field_sum_discount_check, 
+	$count_sym_field_sum_discount, $count_sym_field_sum_procent_check, $count_sym_field_sum_discount_check,
 	$offset_field_str, $offset_field_itog, $offset_field_itog_sum, $offset_field_cash, $offset_field_cash_sum,
 	$offset_field_payment_name2, $offset_field_payment_sum2, $offset_field_payment_name3, $offset_field_payment_sum3, $offset_field_payment_name4,
 	$offset_field_payment_sum4, $offset_field_change, $offset_field_change_sum,
@@ -2574,7 +2575,36 @@ sub set_check_close_ext
     return $res;
 }
 
+sub set_check_close_ext_v2
+{
+    # cash_sum, sum_type2 - sum_type16 is big int string
+    my ($self, $pass, $cash_sum, $sum_type2, $sum_type3, $sum_type4, $sum_type5, $sum_type6, $sum_type7, $sum_type8, $sum_type9,
+        $sum_type10, $sum_type11, $sum_type12, $sum_type13, $sum_type14, $sum_type15, $sum_type16,
+        $discount, $tax1, $tax2, $tax3, $tax4, $tax5, $tax6, $tax_type, $text, undef) = @_;
 
+    my $res = {};
+    my $buf = $self->send_cmd(134, SET_CHECK_CLOSE_EXT_V2, "Va5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5vCCCCCCCA40", $pass,
+        get_le_bigint5_from_string($cash_sum),
+        get_le_bigint5_from_string($sum_type2), get_le_bigint5_from_string($sum_type3), get_le_bigint5_from_string($sum_type4),
+        get_le_bigint5_from_string($sum_type5), get_le_bigint5_from_string($sum_type6), get_le_bigint5_from_string($sum_type7),
+        get_le_bigint5_from_string($sum_type8), get_le_bigint5_from_string($sum_type9), get_le_bigint5_from_string($sum_type10),
+        get_le_bigint5_from_string($sum_type11), get_le_bigint5_from_string($sum_type12), get_le_bigint5_from_string($sum_type13),
+        get_le_bigint5_from_string($sum_type14), get_le_bigint5_from_string($sum_type15), get_le_bigint5_from_string($sum_type16),
+        get_binary_discout_check($discount), $tax1, $tax2, $tax3, $tax4, $tax5, $tax6, $tax_type, $self->encode_string($text));
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+        my ($oper, $change, $doc_num, $fiscal_sign, $fiscal_sign_as_string, undef) = unpack("Ca5CC", $buf);
+        $res->{OPERATOR} = $oper;
+        $res->{SHORT_CHANGE} = get_string_from_le_bigint5($change);
+    }
+
+    return $res;
+}
 
 
 
@@ -3464,7 +3494,7 @@ sub read_byte
 	my ($sec1, $time1) = gettimeofday();
 	$elapsed = ($sec1 - $sec0) * 1000000 + ($time1 - $time0);
 	# wait 1 ms
-	usleep(1000); 
+	usleep(1000);
     }
     while($elapsed < $timeout);
 

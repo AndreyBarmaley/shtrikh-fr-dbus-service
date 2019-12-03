@@ -220,7 +220,7 @@ dbus_method("device_get_return_error_name", ["int32"], [["dict", "string", "stri
 dbus_method("device_set_open_fiscal_underdoc", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
     "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_standard_open_fiscal_underdoc", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32"], [["dict", "string", "string"]]);
-dbus_method("device_set_forming_operation_underdoc", ["int32", "int32", "int32", "int32", "int32", "int32", "int32", 
+dbus_method("device_set_forming_operation_underdoc", ["int32", "int32", "int32", "int32", "int32", "int32", "int32",
 	"int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "int32",
 	"string", "string", "int32", "int32", "int32", "int32", "int32", "string" ], [["dict", "string", "string"]]);
 dbus_method("device_set_forming_standard_operation_underdoc", ["int32", "int32", "string", "string", "int32", "int32", "int32", "int32", "int32", "string" ], [["dict", "string", "string"]]);
@@ -256,9 +256,12 @@ dbus_method("device_set_reversal_discount", ["int32", "string", "int32", "int32"
 dbus_method("device_set_reversal_allowance", ["int32", "string", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
 dbus_method("device_get_document_repeat", ["int32", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_set_check_open", ["int32", "int32"], [["dict", "string", "string"]]);
-dbus_method("device_set_check_close_ext", ["int32", "string", "string", "string", "string", 
-    "string", "string", "string", "string", "string", "string", "string", "string",  "string", "string", "string", "string", 
+dbus_method("device_set_check_close_ext", ["int32", "string", "string", "string", "string",
+    "string", "string", "string", "string", "string", "string", "string", "string",  "string", "string", "string", "string",
     "double", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
+dbus_method("device_set_check_close_ext_v2", ["int32", "string", "string", "string", "string",
+    "string", "string", "string", "string", "string", "string", "string", "string",  "string", "string", "string", "string",
+    "double", "int32", "int32", "int32", "int32", "int32", "int32", "int32", "string"], [["dict", "string", "string"]]);
 dbus_method("device_set_print_continue", ["int32", "bool"], [["dict", "string", "string"]]);
 dbus_method("device_set_load_graphics", ["int32", "int32", ["array", "byte"]], [["dict", "string", "string"]]);
 dbus_method("device_set_print_graphics", ["int32", "int32", "int32", "bool"], [["dict", "string", "string"]]);
@@ -1496,6 +1499,17 @@ sub device_set_check_close_ext
 
     return $self->device_is_online() ?
 	$self->{DEVICE}->set_check_close_ext(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_set_check_close_ext_v2
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->set_check_close_ext_v2(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_print_continue
