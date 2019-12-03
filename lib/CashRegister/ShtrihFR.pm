@@ -3328,18 +3328,16 @@ sub get_find_fn_document
 
     if($buf)
     {
-	my ($ofd_received, $type, $date, $hour, $minute, $document_number, $fiscal_sign, $fiscal_sign_as_string, $inn, $kktregnum, $tax_type, $work_mode, undef) = unpack("CCa3CCVVa10a12a20CC", $buf);
-	$res->{OFD_RECEIVED} = get_hexstr2($ofd_received);
-	$res->{DOCUMENT_NUMBER} = $document_number;
-	$res->{FISCAL_SIGN} = $fiscal_sign;
-	$res->{FISCAL_SIGN_AS_STRING} = $fiscal_sign_as_string;
-	$res->{TYPE} = get_hexstr2($type);
-	$res->{DATE} = format_date_decode($date);
-	$res->{TIME} = format_time($hour, $minute, 0);
-	$res->{INN} = $inn;
-	$res->{KKT_REG_NUM} = $kktregnum;
-	$res->{TAX_TYPE} = get_hexstr2($tax_type);
-	$res->{WORK_MODE} = get_hexstr2($work_mode);
+        # Not all bytes were decoded, and I'm unsure about optype yet.
+        my ($type, $ofd , $year, $month, $day, $hour, $minute, $fd, undef, undef, undef, $sign, $optype, $sum, undef) = unpack("CCCCCCCCCCCVCV", $buf);
+	    $res->{RECEIPT_TYPE} = get_hexstr2($type);
+	    $res->{OFD_PROCESSED} = get_hexstr2($ofd);
+        $res->{FD_NUMBER} = $fd;
+        $res->{DATE} = format_date(2000 + $year, $month, $day);
+        $res->{TIME} = format_time($hour, $minute, 0);
+        $res->{FISCAL_SIGN} = $sign;
+        $res->{OPERATION_TYPE} = $optype;
+        $res->{TOTAL} = $sum;
     }
 
     return $res;

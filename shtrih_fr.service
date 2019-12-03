@@ -12,7 +12,7 @@
 
 use strict;
 use utf8;
-use Logger::Syslog;
+use Unix::Syslog;
 
 use Net::DBus;
 use Net::DBus::Reactor;
@@ -85,14 +85,14 @@ sub new
 my $dbus_handle = Net::DBus->system();
 unless($dbus_handle)
 {
-    Logger::Syslog::error("dbus: $!\n");
+    Unix::Syslog::error("dbus: $!\n");
     exit 2;
 }
 
 my $dbus_service = $dbus_handle->export_service($str_dbus_service);
 unless($dbus_handle)
 {
-    Logger::Syslog::error("dbus $str_dbus_service: $!\n");
+    Unix::Syslog::error("dbus $str_dbus_service: $!\n");
     exit 3;
 }
 
@@ -121,7 +121,7 @@ if(-f $pidfile)
 
                 if(-f $pidfile)
                 {
-		    Logger::Syslog::error("service: is running, pid: " . $pid);
+		    Unix::Syslog::error("service: is running, pid: " . $pid);
                     exit 5;
                 }
             }
@@ -137,7 +137,7 @@ if(-f $pidfile)
 my $dbus_object = DBusKassaService->new($dbus_service);
 unless($dbus_handle)
 {
-    Logger::Syslog::error("dbus kassa: $!\n");
+    Unix::Syslog::error("dbus kassa: $!\n");
     exit 4;
 }
 
