@@ -15,7 +15,7 @@ return: bool
 # 2. device command:
 
 command: 0x01
-call:   device_get_dump 
+call:   device_get_dump
 params: password, int32
 params: subsystem, int32
 return: dict["string", "string"]
@@ -1169,4 +1169,10 @@ return: dict["string", "string"]
 command: 0xFF42
 call:   device_set_start_close_turn
 params: password, int32
+return: dict["string", "string"]
+
+command: 0xFF0A
+call:   device_get_find_fn_document
+params: password, int32
+params: docnum, int32
 return: dict["string", "string"]
