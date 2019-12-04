@@ -172,8 +172,6 @@ use constant
     FF_GET_FN_TURN_STATUS   => 0x40,
     FF_SET_START_OPEN_TURN  => 0x41,
     FF_SET_START_CLOSE_TURN => 0x42,
-    FF_SET_CHECK_CLOSE_EXT_V2		=> 0x45,
-
     FF_GET_FIND_FN_DOCUMENT => 0x0a
 };
 
@@ -2576,59 +2574,6 @@ sub set_check_close_ext
 
     return $res;
 }
-
-sub set_check_close_ext_v2
-{
-    # cash_sum, sum_type2 - sum_type16 is big int string
-    my ($self, $pass, $cash_sum, $sum_type2, $sum_type3, $sum_type4, $sum_type5, $sum_type6, $sum_type7, $sum_type8, $sum_type9,
-        $sum_type10, $sum_type11, $sum_type12, $sum_type13, $sum_type14, $sum_type15, $sum_type16,
-        $discount, $tax1, $tax2, $tax3, $tax4, $tax5, $tax6, $tax_type, $text, undef) = @_;
-
-    my $res = {};
-    my $buf = $self->send_cmd_ff(134, FF_SET_CHECK_CLOSE_EXT_V2, "Va5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5vCCCCCCCA40", $pass,
-        get_le_bigint5_from_string($cash_sum),
-        get_le_bigint5_from_string($sum_type2), get_le_bigint5_from_string($sum_type3), get_le_bigint5_from_string($sum_type4),
-        get_le_bigint5_from_string($sum_type5), get_le_bigint5_from_string($sum_type6), get_le_bigint5_from_string($sum_type7),
-        get_le_bigint5_from_string($sum_type8), get_le_bigint5_from_string($sum_type9), get_le_bigint5_from_string($sum_type10),
-        get_le_bigint5_from_string($sum_type11), get_le_bigint5_from_string($sum_type12), get_le_bigint5_from_string($sum_type13),
-        get_le_bigint5_from_string($sum_type14), get_le_bigint5_from_string($sum_type15), get_le_bigint5_from_string($sum_type16),
-        get_binary_discout_check($discount), $tax1, $tax2, $tax3, $tax4, $tax5, $tax6, $tax_type, $self->encode_string($text));
-
-    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
-    $res->{ERROR_CODE} = $self->{ERROR_CODE};
-    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
-
-    if($buf)
-    {
-        my ($oper, $change, $doc_num, $fiscal_sign, $fiscal_sign_as_string, undef) = unpack("Ca5CC", $buf);
-        $res->{OPERATOR} = $oper;
-        $res->{SHORT_CHANGE} = get_string_from_le_bigint5($change);
-    }
-
-    return $res;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 sub set_print_continue
 {
