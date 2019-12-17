@@ -296,6 +296,7 @@ dbus_method("device_get_fn_duration", ["int32"], [["dict", "string", "string"]])
 dbus_method("device_get_fn_version", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_fn_turn_status", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_get_find_fn_document", ["int32", "int32"], [["dict", "string", "string"]]);
+dbus_method("device_get_fn_fiscalization_result", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_start_open_turn", ["int32"], [["dict", "string", "string"]]);
 dbus_method("device_set_start_close_turn", ["int32"], [["dict", "string", "string"]]);
 
@@ -1904,6 +1905,17 @@ sub device_get_find_fn_document
 
     return $self->device_is_online() ?
 	$self->{DEVICE}->get_find_fn_document(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
+}
+
+sub device_get_fn_fiscalization_result
+{
+    my $self = shift;
+
+    my ($package, $filename, $line, $subroutine, undef) = caller(0);
+    $self->syslog("debug", $subroutine, ", params: [" . join(",", @_) . "]");
+
+    return $self->device_is_online() ?
+	$self->{DEVICE}->get_fn_fiscalization_result(@_) : { ERROR_CODE => -1, ERROR_MESSAGE => $self->device_get_error() };
 }
 
 sub device_set_start_open_turn

@@ -169,6 +169,7 @@ use constant
     FF_GET_FN_NUMBER        => 0x02,
     FF_GET_FN_DURATION      => 0x03,
     FF_GET_FN_VERSION       => 0x04,
+    FF_GET_FN_FISCALIZATION_RESULT => 0x09,
     FF_GET_FN_TURN_STATUS   => 0x40,
     FF_SET_START_OPEN_TURN  => 0x41,
     FF_SET_START_CLOSE_TURN => 0x42,
@@ -3350,6 +3351,29 @@ sub get_fn_version
 
     return $res;
 }
+
+sub get_fn_fiscalization_result
+{
+    my ($self, $pass, undef) = @_;
+
+    my $res = {};
+    my $buf = $self->send_cmd_ff(6, FF_GET_FN_FISCALIZATION_RESULT, "V", $pass);
+
+    $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
+    $res->{ERROR_CODE} = $self->{ERROR_CODE};
+    $res->{ERROR_MESSAGE} = $self->{ERROR_MESSAGE};
+
+    if($buf)
+    {
+        # TODO: retrieves KKT RN only. Modify this if you need anything else
+        my ($year, $month, $day, $hour, $minute, $inn, $kkt_rn, undef) = unpack("CCCCCa12a20", $buf);
+
+        $res->{KKT_RN} = $kkt_rn;
+    }
+
+    return $res;
+}
+
 
 sub get_fn_turn_status
 {
