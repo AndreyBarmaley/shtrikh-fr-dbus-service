@@ -1156,6 +1156,12 @@ call:   device_get_fn_version
 params: password, int32
 return: dict["string", "string"]
 
+
+command: 0xFF09
+call:   device_get_fn_fiscalization_result
+params: password, int32
+return: dict["string", "string"]
+
 command: 0xFF40
 call:   device_get_fn_turn_status
 params: password, int32
