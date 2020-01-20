@@ -3274,8 +3274,7 @@ sub get_find_fn_document
 
     if($buf)
     {
-        # Not all bytes were decoded, and I'm unsure about optype yet.
-        my ($type, $ofd , $year, $month, $day, $hour, $minute, $fd, undef, undef, undef, $sign, $optype, $sum, undef) = unpack("CCCCCCCCCCCVCV", $buf);
+        my ($type, $ofd , $year, $month, $day, $hour, $minute, $fd, $sign, $optype, $sum, undef) = unpack("CCCCCCCVVCV", $buf);
 	    $res->{RECEIPT_TYPE} = get_hexstr2($type);
 	    $res->{OFD_PROCESSED} = get_hexstr2($ofd);
         $res->{FD_NUMBER} = $fd;
