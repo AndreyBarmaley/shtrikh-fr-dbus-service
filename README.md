@@ -2,11 +2,11 @@
 dbus service for cash register (ShtrikhFR)
 
 Драйвер для ККМ аппаратов серии Штрих. Сделан в виде сервиса DBus.
-Преимущество - работает в любых тулкитах биндинг на DBus (bash, javascript, c++, perl, python и.т.д), можно расшарить через сеть. В дравере реализован протокол Штрих 1.12 (+добавлена несколько новых команд из нового протокола 2.0.24, открыть смету и.т.д.). Есть пример чтения/записи таблиц на Qt.
+Преимущество - работает в любых тулкитах биндинг на DBus (bash, javascript, c++, perl, python и.т.д), можно расшарить через сеть. В драйвере реализован протокол Штрих 1.12 (+добавлена несколько новых команд из нового протокола 2.0.24, открыть смету и.т.д.). Есть пример чтения/записи таблиц на Qt.
 
 Установка:
 - скопировать shtrikh-fr-dbus-service например в /opt
-- установить в систему дополнительные модули для Perl - Device::SerialPort, Time::HiRes, Math::BigInt, Logger::Syslog, Net::DBus
+- установить в систему дополнительные модули для Perl - Device::SerialPort, Time::HiRes, Math::BigInt, Unix::Syslog, Net::DBus
 - в файле /etc/dbus-1/system.conf определить сервисную директорию /etc/dbus-1/system-services
    <standard_system_servicedirs/>
    <servicedir>/etc/dbus-1/system-services</servicedir>
