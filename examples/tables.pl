@@ -44,8 +44,7 @@ while(<>)
 	print "| help\n";
 	print "| show tables\n";
 	print "| describe table <tid>\n";
-	print "| select all from table <tid>\n";
-	print "| select all from table <tid> where field <fid>\n";
+	print "| select <all|fid> from table <tid>\n";
     }
     elsif($cmd =~ /show\s+tables/)
     {
@@ -69,25 +68,22 @@ while(<>)
 	    printf("| %3d |%5s |%5d | %s\n", $fid, $res->{FIELD_TYPE}, $res->{FIELD_SIZE}, $res->{FIELD_NAME});
 	}
     }
-    elsif($cmd =~ /select\s+all\s+from\s+table\s+(\d+)(.*)/)
+    elsif($cmd =~ /select\s+(\w*)\s*from\s+table\s+(\d+)/)
     {
-	my $tid = $1;
-	my $last = $2;
+        my $fid = $1;
+	my $tid = $2;
 	my $ref = $tables[$tid - 1];
 	my $fields = $ref->{FIELD_COUNT};
 	my $columns = $ref->{COLUMN_COUNT};
 
-	if($last)
-	{
-	    if($last =~ /\s+where\s+field\s+(\d+)/)
-	    {
-		select_all_from_table_field($pass, $tid, $fields, $columns, $1);
-	    }
+	if($fid =~ /(\d+)/)
+        {
+            select_all_from_table_field($pass, $tid, $fields, $columns, $fid);
 	}
-	else
-	{
-	    select_all_from_table($pass, $tid, $fields, $columns);
-	}
+        else
+        {
+            select_all_from_table($pass, $tid, $fields, $columns);
+        }
     }
 
     print $prompt;
