@@ -2,6 +2,8 @@
  
 use Net::DBus;
 use strict;
+
+my $VERSION = 20201123;
  
 my $dbus = Net::DBus->system();
 die("error: $!\n") unless($dbus);
@@ -25,32 +27,49 @@ for(1 .. 25)
     push @tables, $res;
 }
 
-show_tables();
-print $prompt;
-
-while(<>)
+if(scalar @ARGV)
 {
-    my $cmd = lc($_);
-    chomp $cmd;
+    parse_cmd(join(" ", @ARGV));
+}
+else
+{
+    show_tables();
+    print $prompt;
 
-    if($cmd eq "exit" || $cmd eq "quit")
+    while(<>)
     {
-	exit;
-    }
+	my $cmd = lc($_);
+	chomp $cmd;
 
-    if($cmd =~ /help/)
+	if($cmd eq "exit" || $cmd eq "quit")
+	{
+	    exit;
+	}
+
+	parse_cmd($cmd);
+	print $prompt;
+    }
+}
+
+sub parse_cmd
+{
+    my $cmd = shift;
+
+    if($cmd =~ /^help$/)
     {
 	print "| exit\n";
 	print "| help\n";
 	print "| show tables\n";
 	print "| describe table <tid>\n";
 	print "| select <all|fid> from table <tid>\n";
+	print "| update table <tid> set field <fid> = value\n";
+	print "| update table <tid> set field <fid> = value where col = <cid>\n";
     }
-    elsif($cmd =~ /show\s+tables/)
+    elsif($cmd =~ /^show\s+tables$/)
     {
 	show_tables();
     }
-    elsif($cmd =~ /describe\s+table\s+(\d+)/)
+    elsif($cmd =~ /^describe\s+table\s+(\d+)$/)
     {
 	my $tid = $1;
 	my $ref = $tables[$tid - 1];
@@ -68,7 +87,7 @@ while(<>)
 	    printf("| %3d |%5s |%5d | %s\n", $fid, $res->{FIELD_TYPE}, $res->{FIELD_SIZE}, $res->{FIELD_NAME});
 	}
     }
-    elsif($cmd =~ /select\s+(\w*)\s*from\s+table\s+(\d+)/)
+    elsif($cmd =~ /^select\s+(\w*)\s*from\s+table\s+(\d+)$/)
     {
         my $fid = $1;
 	my $tid = $2;
@@ -85,8 +104,40 @@ while(<>)
             select_all_from_table($pass, $tid, $fields, $columns);
         }
     }
+    elsif($cmd =~ /^update\s+table\s+(\d+)\s+set\s+field\s+(\d+)\s*=(\w+)\s+where\s+col\s*=\s*(\d+)$/)
+    {
+	my $tid = $1;
+	my $fid = $2;
+	my $val = $3;
+	my $col = $4;
+	my $ref = $tables[$tid - 1];
 
-    print $prompt;
+	if(0 < $col and $col <= $ref->{COLUMN_COUNT})
+	{
+	    update_table_set_field($pass, $tid, $fid, $col, $val);
+	}
+	else
+	{
+	    print("column out of range\n");
+	}
+    }
+    elsif($cmd =~ /^update\s+table\s+(\d+)\s+set\s+field\s+(\d+)\s*=\s*(\w+)$/)
+    {
+	my $tid = $1;
+	my $fid = $2;
+	my $val = $3;
+	my $ref = $tables[$tid - 1];
+
+	for my $col (1 .. $ref->{COLUMN_COUNT})
+	{
+	    my $err = update_table_set_field($pass, $tid, $fid, $col, $val);
+	    last if(0 < $err);
+	}
+    }
+    else
+    {
+	print("unknown command: $cmd\n");
+    }
 }
 
 sub remove_unused
@@ -109,6 +160,25 @@ sub show_tables
 	printf("|%3d | %s\n", $tid, $ref->{TABLE_NAME});
 	$tid++;
     }
+}
+
+sub update_table_set_field
+{
+    my ($pass, $tid, $fid, $col, $val, undef) = @_;
+
+    my $res = $object->device_set_write_table($pass, $tid, $col, $fid, [ $val ]);
+
+    if($res->{ERROR_CODE})
+    {
+	print $res->{ERROR_MESSAGE}, "\n";
+	return 1;
+    }
+    else
+    {
+	print "OK\n";
+    }
+
+    return 0;
 }
 
 sub select_all_from_table
