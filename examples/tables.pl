@@ -1,9 +1,12 @@
 #!/usr/bin/perl
  
 use Net::DBus;
+
+use utf8;
+use Encode qw(decode);
 use strict;
 
-my $VERSION = 20201123;
+my $VERSION = 20201126;
  
 my $dbus = Net::DBus->system();
 die("error: $!\n") unless($dbus);
@@ -152,6 +155,17 @@ sub remove_unused
     }
 }
 
+sub hexdump_to_string
+{
+    my @vals = map { hex } split /\s*,\s*/, shift;
+    my $text = join '', map { chr } @vals;
+    $text =~ s/\0*$//g;
+    $text = decode("cp1251", $text);
+    utf8::encode($text);
+
+    return $text;
+}
+
 sub show_tables
 {
     my $tid = 1;
@@ -189,7 +203,6 @@ sub select_all_from_table
     for my $fid (1 .. $fields)
     {
         my $res = $object->device_get_structure_field($pass, $tid, $fid);
-	remove_unused($res);
 	printf("| %s ", $res->{FIELD_NAME});
     }
     printf("\n");
@@ -199,13 +212,24 @@ sub select_all_from_table
     {
         for my $fid (1 .. $fields)
         {
-    	    my $res = $object->device_get_read_table($pass, $tid, $col, $fid);
-    	    remove_unused($res);
-	    printf("| %s ", $res->{VALUE});
+    	    my $res = $object->device_get_structure_field($pass, $tid, $fid);
+	    my $text = $res->{FIELD_TYPE} eq "CHAR";
+
+    	    $res = $object->device_get_read_table($pass, $tid, $col, $fid);
+	    my $val = $res->{VALUE};
+
+	    if($text)
+	    {
+		$val = hexdump_to_string($res->{VALUE});
+	    }
+
+	    printf("| %s ", $val);
 	}
+
 	printf("\n");
     }
 }
+
 
 sub select_all_from_table_field
 {
@@ -213,15 +237,22 @@ sub select_all_from_table_field
 
     # header
     my $res = $object->device_get_structure_field($pass, $tid, $fid);
-    remove_unused($res);
+
     printf("| COLS | %s\n", $res->{FIELD_NAME});
     printf("|------+------------\n");
 
     # content
     for my $col (1 .. $columns)
     {
-    	$res = $object->device_get_read_table($pass, $tid, $col, $fid);
-    	remove_unused($res);
-	printf("| %4d | %s\n", $col, $res->{VALUE});
+	my $text = $res->{FIELD_TYPE} eq "CHAR";
+	$res = $object->device_get_read_table($pass, $tid, $col, $fid);
+	my $val = $res->{VALUE};
+
+	if($text)
+	{
+	    $val = hexdump_to_string($res->{VALUE});
+	}
+
+	printf("| %4d | %s\n", $col, $val);
     }
 }

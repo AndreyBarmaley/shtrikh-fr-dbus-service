@@ -15,6 +15,7 @@ use Math::BigInt;
 use Encode;
 
 use strict;
+no warnings 'deprecated';
 
 use constant
 {
@@ -3533,6 +3534,7 @@ sub fix_command_delay
     return $self->{TIMEOUT} * 2;
 }
 
+# ProtocolFR_1.12.pdf: Приложение 3 Рекомендуемая диаграмма состояний обмена нижнего уровня со стороны ПК
 sub send_cmd
 {
     my ($self, $len, $cmd, $str, @param) = @_;
