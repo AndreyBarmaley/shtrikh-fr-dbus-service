@@ -13,7 +13,7 @@ dbus service for cash register (ShtrikhFR)
 - склонировать проект shtrikh-fr-dbus-service например в /opt, воспользуйтесь git clone
 - установить в систему дополнительные модули для Perl - Device::SerialPort, Time::HiRes, Math::BigInt, Unix::Syslog, Net::DBus
 
-- в файле ru.shtrih_m.fr.service исправить путь до исполняемого файла shtrih_fr.service, поправить права на запуск, также User=XXXX должен быть сервисным пользователем системы, который имеет доступ чтения и записи в порты ttyS*,ttyUSB*, для теста можете воспользоваться правами root
+- в файле ru.shtrih_m.fr.service исправить путь до исполняемого файла shtrih_fr.service, поправить права на запуск, также User=XXXX должен быть сервисным пользователем системы, который имеет доступ чтения и записи в порты ttyS*,ttyUSB* (обычно это группа dialout), для теста можете воспользоваться правами root
 
 - файл ru.shtrih_m.fr.service скопировать в сервисную директорию, обычно это /usr/share/dbus-1/system-services
 - файл ru.shtrih_m.fr.conf скопировать в директорию /etc/dbus-1/system.d
@@ -22,4 +22,5 @@ dbus service for cash register (ShtrikhFR)
 - запустить команду на получение статуса ККМ examples/get_status.sh, сервис стартанет автоматически и выдаст в консоль результат
 
 Правило udev для usb подключения на фиксированный порт:
+
 KERNEL=="ttyACM*", ACTION=="add", ENV{ID_BUS}=="usb", ENV{ID_VENDOR_ID}=="1fc9", ENV{ID_MODEL_ID}=="0083", SYMLINK+="ttyShtrikh"
