@@ -10,7 +10,7 @@ dbus service for cash register (ShtrikhFR)
 Добавлены консольная утилита чтения/записи таблиц и примеры на Qt.
 
 Установка:
-- скопировать shtrikh-fr-dbus-service например в /opt, воспользуйтесь git clone
+- склонировать проект shtrikh-fr-dbus-service например в /opt, воспользуйтесь git clone
 - установить в систему дополнительные модули для Perl - Device::SerialPort, Time::HiRes, Math::BigInt, Unix::Syslog, Net::DBus
 
 - в файле ru.shtrih_m.fr.service исправить путь до исполняемого файла shtrih_fr.service, поправить права на запуск, также User=XXXX должен быть сервисным пользователем системы, который имеет доступ чтения и записи в порты ttyS*,ttyUSB*, для теста можете воспользоваться правами root
