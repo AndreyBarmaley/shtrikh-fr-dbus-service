@@ -163,7 +163,7 @@ sub hexdump_to_string
     $text = decode("cp1251", $text);
     utf8::encode($text);
 
-    return $text;
+    return '\'' . $text . '\'';
 }
 
 sub show_tables
@@ -216,7 +216,7 @@ sub select_all_from_table
 	    my $text = $res->{FIELD_TYPE} eq "CHAR";
 
     	    $res = $object->device_get_read_table($pass, $tid, $col, $fid);
-	    my $val = $res->{VALUE};
+	    my $val = defined $res->{VALUE} ? $res->{VALUE} : "0x00";
 
 	    if($text)
 	    {
@@ -246,7 +246,7 @@ sub select_all_from_table_field
     {
 	my $text = $res->{FIELD_TYPE} eq "CHAR";
 	$res = $object->device_get_read_table($pass, $tid, $col, $fid);
-	my $val = $res->{VALUE};
+	my $val = defined $res->{VALUE} ? $res->{VALUE} : "0x00";
 
 	if($text)
 	{
