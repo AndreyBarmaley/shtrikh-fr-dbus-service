@@ -19,7 +19,7 @@ no warnings 'deprecated';
 
 use constant
 {
-    MY_DRIVER_VERSION => 20190514,
+    MY_DRIVER_VERSION => 20210112,
     FR_PROTOCOL_VERSION	=> 1.99
 };
 
@@ -346,13 +346,34 @@ sub printing_wait
 	{
 	    my $res = $self->get_short_status($pass);
 
-	    if($res->{FR_SUBMODE} == 5 || $res->{FR_SUBMODE} == 4)
+	    # protocol 2.0
+	    if(exists $res->{PRINT_STATUS})
 	    {
-		$self->wait_default();
+		# status:
+		# 0: print ending, 1: paper break, 2: hardware error, 5: printing
+
+		if($res->{PRINT_STATUS} == 5)
+		{
+		    $self->wait_default();
+		}
+		else
+		{
+	    	    warn(__PACKAGE__, ": ", "paper break") if($res->{PRINT_STATUS} == 1);
+	    	    warn(__PACKAGE__, ": ", "hardware error") if($res->{PRINT_STATUS} == 2);
+		    last;
+		}
 	    }
+	    # protocol 1.2
 	    else
 	    {
-		last;
+		if($res->{FR_SUBMODE} == 5 || $res->{FR_SUBMODE} == 4)
+		{
+		    $self->wait_default();
+		}
+		else
+		{
+		    last;
+		}
 	    }
 	}
     }
@@ -949,6 +970,8 @@ sub set_init_tables
 sub set_cut_check
 {
     my ($self, $pass, $type, undef) = @_;
+
+    $self->printing_wait($pass);
 
     my $res = {};
     my $buf = $self->send_cmd(6, SET_CUT_CHECK, "VC", $pass, $type);
@@ -3169,7 +3192,7 @@ sub get_ext_request
     my ($self, $type, $array_ref, undef) = @_;
 
     my $res = {};
-    my $data = pack("C*", @{$array_ref});
+    my $data = defined $array_ref ? pack("C*", @{$array_ref}) : "";
     my $buf = $self->send_cmd(2 + length $data, GET_EXT_REQUEST, "Ca*", $type, $data);
 
     $res->{DRIVER_VERSION} = MY_DRIVER_VERSION;
